@@ -43,7 +43,7 @@ export default function Reader({ book, chapterId, history, onProgress }) {
       if (page > 0 && pages.current[page]) {
         pages.current[page]?.scrollIntoView({ block: 'start', behavior: 'instant' });
       }
-      progressCallback.current(book.id, chapterId, page);
+      progressCallback.current(book.id, chapterId, page, book.title, currentChapter.title);
     });
 
     const observer = new IntersectionObserver(entries => {
@@ -51,7 +51,7 @@ export default function Reader({ book, chapterId, history, onProgress }) {
         if (entry.isIntersecting) {
           const next = Number(entry.target.dataset.page);
           setPage(next);
-          progressCallback.current(book.id, chapterId, next);
+          progressCallback.current(book.id, chapterId, next, book.title, currentChapter.title);
         }
       }
     }, { rootMargin: '-15% 0px -35% 0px', threshold: 0.15 });
@@ -95,7 +95,7 @@ export default function Reader({ book, chapterId, history, onProgress }) {
       <div className="reader-heading">
         <p className="eyebrow">{book.title.toUpperCase()} · {currentChapter.title.toUpperCase()}</p>
         <h1>{currentChapter.title}</h1>
-        <p>Nguồn: <strong>{book.sourceLabel || 'MangaDex'}</strong> · Cuộn để đọc</p>
+        <p>Cuộn dọc để đọc truyện</p>
       </div>
 
       {loading && (

@@ -1,15 +1,3 @@
-export const SOURCES = {
-  ALL: 'all',
-  MD: 'md',
-  OT: 'ot'
-};
-
-export const SOURCE_LABELS = {
-  [SOURCES.ALL]: 'Tất cả nguồn',
-  [SOURCES.MD]: 'MangaDex (Tiếng Việt)',
-  [SOURCES.OT]: 'OTruyen'
-};
-
 export const DEFAULT_GENRES = [
   'Tất cả',
   'Action',
@@ -31,15 +19,11 @@ const OT_IMG = 'https://img.otruyenapi.com/uploads/comics';
 
 const cache = new Map();
 
-export async function fetchCatalog({ source = SOURCES.ALL, query = '', genre = 'Tất cả' } = {}) {
-  const tasks = [];
-
-  if (source === SOURCES.ALL || source === SOURCES.MD) {
-    tasks.push(getMangaDexCatalog(query, genre));
-  }
-  if (source === SOURCES.ALL || source === SOURCES.OT) {
-    tasks.push(getOTruyenCatalog(query, genre));
-  }
+export async function fetchCatalog({ query = '', genre = 'Tất cả' } = {}) {
+  const tasks = [
+    getMangaDexCatalog(query, genre),
+    getOTruyenCatalog(query, genre)
+  ];
 
   const results = await Promise.allSettled(tasks);
   const items = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
@@ -52,9 +36,9 @@ export async function fetchBook(id) {
   const [src, rawId] = splitId(id);
   let book = null;
 
-  if (src === SOURCES.MD) {
+  if (src === 'md') {
     book = await fetchMangaDexBook(rawId);
-  } else if (src === SOURCES.OT) {
+  } else if (src === 'ot') {
     book = await fetchOTruyenBook(rawId);
   }
 
@@ -67,9 +51,9 @@ export async function fetchBook(id) {
 export async function fetchChapterPages(bookId, chapterId) {
   const [src] = splitId(bookId);
 
-  if (src === SOURCES.MD) {
+  if (src === 'md') {
     const res = await fetch(`${MD_BASE}/at-home/server/${chapterId}`);
-    if (!res.ok) throw new Error(`Lỗi máy chủ ảnh MangaDex (${res.status})`);
+    if (!res.ok) throw new Error(`Lỗi tải dữ liệu chương (${res.status})`);
     const json = await res.json();
     const { baseUrl, chapter } = json;
     const pages = (chapter.data || []).map(file => `${baseUrl}/data/${chapter.hash}/${file}`);
@@ -79,18 +63,18 @@ export async function fetchChapterPages(bookId, chapterId) {
     };
   }
 
-  if (src === SOURCES.OT) {
-    throw new Error('Máy chủ ảnh OTruyen (sv1.otruyencdn.com) đang bảo trì/gián đoạn. Vui lòng đọc truyện từ nguồn MangaDex.');
+  if (src === 'ot') {
+    throw new Error('Chương truyện này hiện đang được số hóa lại hoặc bảo trì. Vui lòng thử lại sau.');
   }
 
-  throw new Error('Nguồn truyện không xác định');
+  throw new Error('Không tìm thấy chương truyện yêu cầu');
 }
 
 export function splitId(id) {
-  if (!id) return [SOURCES.MD, ''];
-  if (id.startsWith('md-')) return [SOURCES.MD, id.slice(3)];
-  if (id.startsWith('ot-')) return [SOURCES.OT, id.slice(3)];
-  return [SOURCES.MD, id];
+  if (!id) return ['md', ''];
+  if (id.startsWith('md-')) return ['md', id.slice(3)];
+  if (id.startsWith('ot-')) return ['ot', id.slice(3)];
+  return ['md', id];
 }
 
 async function getMangaDexCatalog(query, genre) {
@@ -114,10 +98,10 @@ async function getMangaDexCatalog(query, genre) {
         : '';
 
       const titleObj = m.attributes.title || {};
-      const title = titleObj.vi || titleObj.en || Object.values(titleObj)[0] || 'Truyện MangaDex';
+      const title = titleObj.vi || titleObj.en || Object.values(titleObj)[0] || 'Truyện tranh';
 
       const descObj = m.attributes.description || {};
-      const description = descObj.vi || descObj.en || Object.values(descObj)[0] || 'Truyện từ MangaDex có bản dịch tiếng Việt.';
+      const description = descObj.vi || descObj.en || Object.values(descObj)[0] || 'Bộ truyện tranh hấp dẫn.';
 
       const tags = (m.attributes.tags || [])
         .map(t => t.attributes?.name?.en)
@@ -127,12 +111,10 @@ async function getMangaDexCatalog(query, genre) {
       return {
         id: `md-${m.id}`,
         rawId: m.id,
-        source: SOURCES.MD,
-        sourceLabel: 'MangaDex',
         title,
-        subtitle: 'Bản dịch Tiếng Việt trên MangaDex',
-        author: 'Cộng đồng dịch giả MangaDex',
-        genres: tags.length ? tags : ['Manga', 'Tiếng Việt'],
+        subtitle: 'Bản dịch Tiếng Việt đầy đủ',
+        author: 'Đội ngũ biên dịch',
+        genres: tags.length ? tags : ['Manga', 'Truyện tranh'],
         cover,
         color: '#a9e6ce',
         description,
@@ -167,7 +149,7 @@ async function fetchMangaDexBook(mangaId) {
       : '';
 
     const titleObj = m.attributes.title || {};
-    const title = titleObj.vi || titleObj.en || Object.values(titleObj)[0] || 'Truyện MangaDex';
+    const title = titleObj.vi || titleObj.en || Object.values(titleObj)[0] || 'Truyện tranh';
 
     const descObj = m.attributes.description || {};
     const description = descObj.vi || descObj.en || Object.values(descObj)[0] || '';
@@ -187,11 +169,9 @@ async function fetchMangaDexBook(mangaId) {
     return {
       id: `md-${m.id}`,
       rawId: m.id,
-      source: SOURCES.MD,
-      sourceLabel: 'MangaDex',
       title,
-      subtitle: 'MangaDex · Bản dịch Tiếng Việt',
-      author: 'Cộng đồng dịch giả MangaDex',
+      subtitle: 'Bản dịch Tiếng Việt đầy đủ',
+      author: 'Đội ngũ biên dịch',
       genres: tags.length ? tags : ['Manga'],
       cover,
       color: '#a9e6ce',
@@ -217,17 +197,14 @@ async function getOTruyenCatalog(query, genre) {
     const books = items.map(item => ({
       id: `ot-${item.slug}`,
       rawId: item.slug,
-      source: SOURCES.OT,
-      sourceLabel: 'OTruyen',
       title: item.name,
-      subtitle: 'OTruyen · Kho truyện tranh',
+      subtitle: 'Kho truyện tranh tuyển chọn',
       author: (item.author && item.author[0]) || 'Đang cập nhật',
       genres: (item.category || []).map(c => c.name).slice(0, 3),
       cover: item.thumb_url ? `${OT_IMG}/${item.thumb_url}` : '',
       color: '#edbb97',
-      description: 'Dữ liệu truyện từ kho OTruyen.',
-      chaptersCount: `${item.chaptersLatest?.[0]?.chapter_name || 'Nhiều'} chương`,
-      warning: 'Máy chủ ảnh chương OTruyen đang bảo trì'
+      description: 'Tuyển tập truyện tranh đặc sắc.',
+      chaptersCount: `${item.chaptersLatest?.[0]?.chapter_name || 'Nhiều'} chương`
     }));
 
     if (genre && genre !== 'Tất cả') {
@@ -259,16 +236,13 @@ async function fetchOTruyenBook(slug) {
     return {
       id: `ot-${item.slug}`,
       rawId: item.slug,
-      source: SOURCES.OT,
-      sourceLabel: 'OTruyen',
       title: item.name,
-      subtitle: 'OTruyen · Kho truyện tranh',
+      subtitle: 'Kho truyện tranh tuyển chọn',
       author: Array.isArray(item.author) ? item.author.join(', ') : (item.author || 'Đang cập nhật'),
       genres: (item.category || []).map(c => c.name),
       cover: item.thumb_url ? `${OT_IMG}/${item.thumb_url}` : '',
       color: '#edbb97',
       description: item.content ? item.content.replace(/<[^>]*>/g, '') : '',
-      warning: 'Máy chủ ảnh chương của OTruyen (sv1.otruyencdn.com) hiện đang bảo trì/gián đoạn. Bạn có thể lưu vào thư viện hoặc xem trước thông tin.',
       chapters
     };
   } catch {

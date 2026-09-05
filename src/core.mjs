@@ -63,7 +63,13 @@ export function validateState(value, books = []) {
           clean.history[id] = { chapter: h.chapter, page: h.page, at: h.at };
         }
       } else if (h && Number.isFinite(h.at)) {
-        clean.history[id] = { chapter: h.chapter, page: h.page || 0, at: h.at };
+        clean.history[id] = {
+          chapter: h.chapter,
+          page: h.page || 0,
+          bookTitle: typeof h.bookTitle === 'string' ? h.bookTitle.slice(0, 100) : '',
+          chapterTitle: typeof h.chapterTitle === 'string' ? h.chapterTitle.slice(0, 100) : '',
+          at: h.at
+        };
       }
     }
   }

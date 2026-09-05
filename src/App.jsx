@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { filterBooks, loadState, parseRoute, saveState } from './core.mjs';
 import Reader from './Reader.jsx';
-import { DEFAULT_GENRES, fetchBook, fetchCatalog, SOURCE_LABELS, SOURCES } from './sources.js';
+import { DEFAULT_GENRES, fetchBook, fetchCatalog } from './sources.js';
 
 export function Icon({ name, size = 20 }) {
   const paths = {
@@ -55,7 +55,6 @@ function Card({ book }) {
         <span className={`availability ${book.chaptersCount?.includes('Đọc ngay') ? 'ready' : ''}`}>
           {book.chaptersCount || 'Kho truyện'}
         </span>
-        <span className="source-tag">{book.sourceLabel || 'API'}</span>
         <span className="cover-open"><Icon name="arrow" /></span>
       </a>
       <p className="card-genre">{(book.genres || []).join(' · ')}</p>
@@ -70,7 +69,7 @@ function Empty({ library, clear }) {
     <div className="empty">
       <Icon name={library ? 'bookmark' : 'search'} size={36} />
       <h2>{library ? 'Kệ sách đang chờ bạn' : 'Chưa tìm thấy câu chuyện này'}</h2>
-      <p>{library ? 'Lưu một truyện yêu thích từ MangaDex hoặc OTruyen. Lần sau, gặp lại ngay ở đây.' : 'Thử đổi nguồn truyện hoặc bỏ bớt từ khóa tìm kiếm nhé.'}</p>
+      <p>{library ? 'Lưu một truyện yêu thích từ kho truyện. Lần sau, gặp lại ngay ở đây.' : 'Thử đổi thể loại hoặc bỏ bớt từ khóa tìm kiếm nhé.'}</p>
       {library ? (
         <a className="button primary" href="#/">Khám phá truyện <Icon name="arrow" /></a>
       ) : (
@@ -91,7 +90,6 @@ export default function App() {
   const [route, setRoute] = useState(() => parseRoute(location.hash, []));
   const [query, setQuery] = useState('');
   const [genre, setGenre] = useState('Tất cả');
-  const [source, setSource] = useState(SOURCES.ALL);
   const [notice, setNotice] = useState('');
 
   // Catalog state
@@ -116,13 +114,13 @@ export default function App() {
     return () => window.removeEventListener('hashchange', change);
   }, []);
 
-  // Fetch catalog on search, genre or source change
+  // Fetch catalog on search or genre change
   useEffect(() => {
     let active = true;
     setLoadingCatalog(true);
 
     const timeout = setTimeout(() => {
-      fetchCatalog({ source, query, genre })
+      fetchCatalog({ query, genre })
         .then(items => {
           if (!active) return;
           setCatalogItems(items);
@@ -138,7 +136,7 @@ export default function App() {
       active = false;
       clearTimeout(timeout);
     };
-  }, [source, query, genre]);
+  }, [query, genre]);
 
   // Load full book detail when visiting detail or reader route
   useEffect(() => {
@@ -196,10 +194,19 @@ export default function App() {
     setNotice(has ? 'Đã bỏ lưu truyện' : 'Đã thêm vào thư viện');
   }
 
-  function progress(id, chapter, page) {
+  function progress(id, chapter, page, bookTitle, chapterTitle) {
     setState(s => ({
       ...s,
-      history: { ...s.history, [id]: { chapter, page, at: Date.now() } }
+      history: {
+        ...s.history,
+        [id]: {
+          chapter,
+          page,
+          bookTitle: bookTitle || s.history[id]?.bookTitle || '',
+          chapterTitle: chapterTitle || s.history[id]?.chapterTitle || '',
+          at: Date.now()
+        }
+      }
     }));
   }
 
@@ -209,7 +216,6 @@ export default function App() {
   const clear = () => {
     setQuery('');
     setGenre('Tất cả');
-    setSource(SOURCES.ALL);
   };
 
   const currentDisplayList = route.page === 'library'
@@ -241,7 +247,7 @@ export default function App() {
         </nav>
 
         <div className="header-end">
-          <span className="header-note">MangaDex · OTruyen API</span>
+          <span className="header-note">Tủ truyện Fuu</span>
           <button
             className="icon-button"
             aria-label={state.theme === 'dark' ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'}
@@ -263,11 +269,11 @@ export default function App() {
           <>
             <section className="hero">
               <div className="hero-copy">
-                <p className="eyebrow"><span /> KHO TRUYỆN TRANH TIẾNG VIỆT ĐA NGUỒN</p>
+                <p className="eyebrow"><span /> KHO TRUYỆN TRANH TUYỂN CHỌN</p>
                 <h1>Lật một trang.<br />Mở <em>ngàn thế giới.</em></h1>
                 <p className="hero-description">
-                  Kết nối trực tiếp <strong>MangaDex</strong> (6.500+ bộ tiếng Việt) & <strong>OTruyen</strong>.<br className="desktop-break" />
-                  Đọc ngay trên web, cập nhật liên tục, lưu tiến độ và thư viện hoàn toàn trên thiết bị của bạn.
+                  Hàng ngàn chương truyện tranh hấp dẫn với bản dịch tiếng Việt mượt mà.<br className="desktop-break" />
+                  Đọc ngay trên web, cập nhật liên tục, lưu tiến độ và thư viện hoàn toàn riêng tư.
                 </p>
                 <div className="hero-actions">
                   {featured ? (
@@ -284,7 +290,7 @@ export default function App() {
                 </div>
                 <div className="hero-foot">
                   <span className="small-star">✦</span>
-                  <span>MangaDex REST API · OTruyen API · Tự do khám phá.</span>
+                  <span>Đọc mượt mà · Tải nhanh chóng · Tự do khám phá.</span>
                 </div>
               </div>
 
@@ -294,25 +300,25 @@ export default function App() {
                   <a href={`#/book/${featured.id}`} className="hero-cover">
                     <Artwork src={featured.cover} alt={featured.title} eager />
                     <span className="hero-cover-text">
-                      <small>{featured.sourceLabel?.toUpperCase()}</small>
+                      <small>NỔI BẬT</small>
                       <strong>{featured.title}</strong>
                       <span>{(featured.genres || []).slice(0, 2).join(' · ').toUpperCase()}</span>
                     </span>
                   </a>
-                  <span className="hero-sticker">MangaDex<br />+ OTruyen<br /><b>Live API</b></span>
+                  <span className="hero-sticker">Đọc ngay<br /><b>Mỗi ngày</b></span>
                   <div className="featured-caption">
                     <span className="caption-line" />
                     <span>NỔI BẬT HÔM NAY</span>
-                    <b>{featured.sourceLabel}</b>
+                    <b>Tuyển chọn</b>
                   </div>
                 </div>
               )}
             </section>
 
             <div className="editorial-strip">
-              <span>ĐA NGUỒN TRỰC TUYẾN</span>
-              <span>MangaDex (Tiếng Việt) <i>✦</i> OTruyen Catalog</span>
-              <span>KHÔNG CẦN BACKEND</span>
+              <span>TRUYỆN TRANH TRỰC TUYẾN</span>
+              <span>Bản dịch mượt mà <i>✦</i> Cập nhật liên tục</span>
+              <span>TỦ SÁCH RIÊNG TƯ</span>
             </div>
 
             {recent && (
@@ -324,8 +330,8 @@ export default function App() {
                 <a className="continue-card" href={`#/read/${recent[0]}/${recent[1].chapter}`}>
                   <span className="continue-badge"><Icon name="book" size={16} /></span>
                   <span>
-                    <strong>{recent[0]}</strong>
-                    <small>Chương {recent[1].chapter} · Trang {recent[1].page + 1}</small>
+                    <strong>{recent[1].bookTitle || 'Truyện đang đọc'}</strong>
+                    <small>{recent[1].chapterTitle || `Chương ${recent[1].chapter}`} · Trang {recent[1].page + 1}</small>
                   </span>
                   <span className="text-link">Đọc tiếp <Icon name="arrow" /></span>
                 </a>
@@ -365,23 +371,6 @@ export default function App() {
               </label>
             </div>
 
-            {/* Source Selector Tabs */}
-            {route.page !== 'library' && (
-              <div className="source-tabs" role="tablist" aria-label="Chọn nguồn truyện">
-                {Object.values(SOURCES).map(s => (
-                  <button
-                    key={s}
-                    role="tab"
-                    aria-selected={source === s}
-                    className={`source-tab ${source === s ? 'active' : ''}`}
-                    onClick={() => setSource(s)}
-                  >
-                    {SOURCE_LABELS[s]}
-                  </button>
-                ))}
-              </div>
-            )}
-
             <div className="filter-row">
               <div className="filters" role="group" aria-label="Lọc thể loại">
                 {DEFAULT_GENRES.map(g => (
@@ -403,7 +392,7 @@ export default function App() {
             {loadingCatalog ? (
               <div className="empty catalog-loading">
                 <div className="spinner" aria-hidden="true" />
-                <p>Đang tải danh mục truyện từ API…</p>
+                <p>Đang tải danh mục truyện…</p>
               </div>
             ) : currentDisplayList.length ? (
               <div className="book-grid">
@@ -416,7 +405,7 @@ export default function App() {
             )}
 
             <p className="demo-note">
-              <span /> Dữ liệu trực tiếp từ MangaDex & OTruyen API. Thư viện và tiến độ đọc được lưu trên trình duyệt của bạn.
+              <span /> Kho truyện trực tuyến. Thư viện và tiến độ đọc được lưu trên trình duyệt của bạn.
             </p>
           </section>
         )}
@@ -438,10 +427,10 @@ export default function App() {
                 </div>
 
                 <div className="detail-copy">
-                  <p className="eyebrow">{activeBook.sourceLabel?.toUpperCase()} · BẢN DỊCH TIẾNG VIỆT</p>
+                  <p className="eyebrow">BẢN DỊCH TIẾNG VIỆT</p>
                   <h1>{activeBook.title}</h1>
                   <p className="detail-subtitle">{activeBook.subtitle}</p>
-                  <p className="card-author">Tác giả / Nguồn · {activeBook.author}</p>
+                  <p className="card-author">Tác giả · {activeBook.author}</p>
 
                   <div className="tags">
                     {(activeBook.genres || []).map(g => <span key={g}>{g}</span>)}
@@ -545,8 +534,8 @@ export default function App() {
           fuu<span>manga</span>
           <span className="brand-dot">.</span>
         </a>
-        <p>Kho truyện đọc tiếng Việt đa nguồn không cần backend.</p>
-        <span>MangaDex API · OTruyen API</span>
+        <p>Kho truyện đọc tiếng Việt trực tuyến tuyển chọn.</p>
+        <span>FuuManga · Tự do khám phá thế giới truyện tranh</span>
       </footer>
       <div className={`toast ${notice ? 'visible' : ''}`} role="status">
         {notice && <><Icon name="check" />{notice}</>}

@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { KEY, normalize, filterBooks, parseRoute, chapterTarget, loadState, saveState, validateState } from '../src/core.mjs';
 
 const sampleBooks = [
-  { id: 'md-b8e88f44-8fe3-41b8-a391-335576f7ddcc', rawId: 'b8e88f44-8fe3-41b8-a391-335576f7ddcc', title: 'Truyện MangaDex mẫu', genres: ['Kỳ ảo', 'Phiêu lưu'], chapters: [{ id: '1', title: 'Chương 1' }] }
+  { id: 'md-b8e88f44-8fe3-41b8-a391-335576f7ddcc', rawId: 'b8e88f44-8fe3-41b8-a391-335576f7ddcc', title: 'Truyện hành động mẫu', genres: ['Kỳ ảo', 'Phiêu lưu'], chapters: [{ id: '1', title: 'Chương 1' }] }
 ];
 
 test('Vietnamese search and combined filters', () => {
   assert.equal(normalize(' ĐỜI THƯỜNG '), 'doi thuong');
-  assert.equal(filterBooks(sampleBooks, 'MANGADEX', 'Kỳ ảo').length, 1);
-  assert.equal(filterBooks(sampleBooks, 'MANGADEX', 'Tình cảm').length, 0);
+  assert.equal(filterBooks(sampleBooks, 'HÀNH ĐỘNG', 'Kỳ ảo').length, 1);
+  assert.equal(filterBooks(sampleBooks, 'HÀNH ĐỘNG', 'Tình cảm').length, 0);
   assert.equal(filterBooks(sampleBooks, 'khongco', 'Tất cả').length, 0);
 });
 
@@ -38,8 +38,14 @@ test('saved state is validated and deduplicated', () => {
     { saved:['md-b8e88f44-8fe3-41b8-a391-335576f7ddcc'], history:{}, theme:'dark' }
   );
 
-  const remoteState = validateState({ saved: ['md-123456', 'ot-one-piece'] }, sampleBooks);
+  const remoteState = validateState({
+    saved: ['md-123456', 'ot-one-piece'],
+    history: {
+      'md-123456': { chapter: 1, page: 2, bookTitle: 'Truyện hay', chapterTitle: 'Chương 1', at: 1000 }
+    }
+  }, sampleBooks);
   assert.deepEqual(remoteState.saved, ['md-123456', 'ot-one-piece']);
+  assert.equal(remoteState.history['md-123456'].bookTitle, 'Truyện hay');
 });
 
 test('corrupt/blocked storage falls back; valid state round trips', () => {
