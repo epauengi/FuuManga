@@ -1,0 +1,3 @@
+FuuManga original demo artwork and story, 2026.
+All SVG illustrations in this directory were authored specifically for this demo using vector paths. No third-party manga pages, characters, stock photographs, or generated-image service were used. You may use, modify and distribute these original demo assets under CC0 1.0: https://creativecommons.org/publicdomain/zero/1.0/ .
+Fonts are separately licensed under the SIL Open Font License; see ../fonts/*-LICENSE.txt.
