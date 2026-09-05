@@ -13,16 +13,16 @@ export function parseRoute(hash, books = []) {
 
     const id = parts[1];
     if (parts[0] === 'book' && id && parts.length === 2) {
-      const book = books.find(b => b.id === id || `fuu-${b.id}` === id || b.rawId === id);
+      const book = books.find(b => b.id === id || b.rawId === id);
       if (book) return { page: 'detail', book, bookId: book.id };
-      if (/^(md-[a-f0-9-]+|ot-[a-z0-9-]+|fuu-[a-z0-9-]+)$/.test(id)) {
+      if (/^(md-[a-f0-9-]+|ot-[a-z0-9-]+)$/.test(id)) {
         return { page: 'detail', bookId: id };
       }
     }
 
     const chapterParam = parts[2];
     if (parts[0] === 'read' && id && chapterParam && parts.length === 3) {
-      const book = books.find(b => b.id === id || `fuu-${b.id}` === id || b.rawId === id);
+      const book = books.find(b => b.id === id || b.rawId === id);
       if (book) {
         const chapterNum = Number(chapterParam);
         if (/^\d+$/.test(chapterParam) && chapterNum >= 1 && chapterNum <= (book.chapters?.length || 0)) {
@@ -30,7 +30,7 @@ export function parseRoute(hash, books = []) {
         }
         return { page: 'notFound' };
       }
-      if (/^(md-[a-f0-9-]+|ot-[a-z0-9-]+|fuu-[a-z0-9-]+)$/.test(id)) {
+      if (/^(md-[a-f0-9-]+|ot-[a-z0-9-]+)$/.test(id)) {
         return { page: 'reader', bookId: id, chapterId: chapterParam, chapter: Number(chapterParam) || 1 };
       }
     }
@@ -45,8 +45,8 @@ export function validateState(value, books = []) {
   if (!value || typeof value !== 'object') return clean;
   clean.theme = value.theme === 'light' ? 'light' : 'dark';
 
-  const isIdValid = id => books.some(b => b.id === id || `fuu-${b.id}` === id || b.rawId === id) ||
-    /^(md-[a-f0-9-]+|ot-[a-z0-9-]+|fuu-[a-z0-9-]+)$/.test(id);
+  const isIdValid = id => books.some(b => b.id === id || b.rawId === id) ||
+    /^(md-[a-f0-9-]+|ot-[a-z0-9-]+)$/.test(id);
 
   if (Array.isArray(value.saved)) {
     clean.saved = [...new Set(value.saved.filter(isIdValid))];
@@ -55,7 +55,7 @@ export function validateState(value, books = []) {
   if (value.history && typeof value.history === 'object') {
     for (const [id, h] of Object.entries(value.history)) {
       if (!isIdValid(id)) continue;
-      const book = books.find(b => b.id === id || `fuu-${b.id}` === id || b.rawId === id);
+      const book = books.find(b => b.id === id || b.rawId === id);
       if (book) {
         const panels = book.chapters?.[h.chapter - 1]?.panels;
         if (h && Number.isInteger(h.chapter) && h.chapter >= 1 && h.chapter <= (book.chapters?.length || 0) &&
