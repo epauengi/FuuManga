@@ -55,7 +55,8 @@ FuuManga は、デスクトップ・タブレット・スマートフォンの�
 | カテゴリ | 採用技術 | 用途 | 選定理由 |
 | --- | --- | --- | --- |
 | **Frontend** | React 19 (`^19.1.1`) | UI コンポーネントおよび状態管理 | 宣言的 UI 設計と最新 Hooks API の活用 |
-| **Build Tool** | Vite 7 (`^7.1.4`) | 開発サーバーおよび ESM 本番ビルド | 高速な HMR、最小限のバンドルサイズ、開発用プロキシ連携 |
+| **Build Tool** | Vite 7 (`^7.1.4`) | 開発サーバーおよび ESM 本番ビルド | 高速な HMR、最小限のバンドルサイズ |
+| **Edge Runtime** | Cloudflare Pages Functions | MangaDex・OTruyen API の同一オリジンプロキシ | 専用サーバーなしで上流 CORS と MangaDex のホットリンク要件に対応 |
 | **Styling** | Vanilla CSS (CSS Variables) | レイアウト、流体タイポグラフィ、テーマ | ランタイムオーバーヘッドの排除、端末幅に応じた細やかな表示制御 |
 | **Typography** | Be Vietnam Pro / Barlow Condensed | タイトルおよび本文テキスト表示 | 自前ホストフォント（`font-display: swap`）による表示安定化 |
 | **Testing** | Node.js Test Runner (`node:test`) | コアロジック（状態・ルーティング）の単体テスト | 外部テストライブラリ不要で高速に実行できるネイティブ機能 |
@@ -79,10 +80,13 @@ flowchart TD
         Sources["sources.js (データ統合・インメモリキャッシュ)"]
     end
 
+    subgraph Edge ["Cloudflare Pages"]
+        Proxy["Pages Functions (/api/mangadex, /api/mangadex-image, /api/otruyen)"]
+    end
+
     subgraph Upstream ["外部データソース"]
-        MDProxy["Vite 開発用プロキシ (/api/mangadex)"]
-        MangaDex["MangaDex REST API (api.mangadex.org)"]
-        OTruyen["OTruyen REST API (otruyenapi.com)"]
+        MangaDex["MangaDex API + AtHome 画像"]
+        OTruyen["OTruyen API + CDN"]
     end
 
     User --> Router
@@ -94,9 +98,8 @@ flowchart TD
     Reader <--> Storage
     App --> Sources
     Reader --> Sources
-    Sources -->|開発環境| MDProxy --> MangaDex
-    Sources -->|本番環境| MangaDex
-    Sources --> OTruyen
+    Sources -->|同一オリジン| Proxy --> MangaDex
+    Sources -->|同一オリジン| Proxy --> OTruyen
 ```
 
 ---
@@ -179,7 +182,7 @@ const observer = new IntersectionObserver(entries => {
 - 画像取得失敗時の `<Artwork />` 代替表示と、エラー時の案内 UI を整備。
 
 **結果**  
-一部の外部サーバーで障害が発生した場合でも、正常なデータソースの作品は影響を受けずに閲覧を継続できます。
+一部の外部サーバーで障害が発生した場合でも、正常なカタログを維持し、失敗したプロバイダーと再試行操作を表示します。MangaDex と OTruyen の API リクエストは限定された同一オリジンの Cloudflare Pages Function を経由し、MangaDex の表紙・章画像も同一オリジンの画像プロキシを経由します。
 
 ---
 
@@ -200,8 +203,8 @@ const observer = new IntersectionObserver(entries => {
 ### クライアントサイド Hash ルーティング (`#/`)
 
 - **判断**: History API の代わりに Hash ルーティング（`#/book/:id`, `#/read/:id/:chapter`, `#/library`）を採用。
-- **理由**: GitHub Pages や Cloudflare Pages、S3 などの静的ホスティング環境において、サーバー側のリライト設定なしに直接 URL アクセスやリロードを成立させるため。
-- **トレードオフ**: URL に `#` が含まれます。
+- **理由**: Cloudflare Pages Functions が `/api/*` のみを処理する一方、アプリケーションのナビゲーションをサーバー側リライトから独立させるため。
+- **トレードオフ**: URL に `#` が含まれます。MangaDex は同一オリジンプロキシを要求するため、静的ホスト単体ではライブコンテンツを提供できません。
 
 ---
 
@@ -231,10 +234,11 @@ npm test
 ```
 
 主な検証項目:
-- ベトナム語の正規化および複合声調記号の検索フィルタリング。
-- 不正なエンコード、存在しない章番号、パストラバーサル等の境界値ルーティング検証。
-- ローカルストレージのスキーマ検証・サニタイズ・重複排除。
-- ストレージ書き込み拒否および破損データのフォールバック処理。
+- ベトナム語の正規化、ルーティング、ローカルストレージ検証、および破損時フォールバック。
+- ライブソースアダプターの正常な空結果、部分的なプロバイダー障害、全障害、書籍 `404`、不正ペイロード、OTruyen ページ変換。
+- MangaDex・OTruyen プロキシの許可リスト、メソッド拒否、MangaDex User-Agent 転送、安全なレスポンスヘッダー転送。
+
+`tests/browser.py` はライブソース移行前の削除済みモックルートを対象としており、`npm test` にも接続されていません。現在の API カバレッジではありません。
 
 ### 2. 本番ビルド検証
 
@@ -280,13 +284,27 @@ npm run build
    npm run build
    ```
 
+### Cloudflare Pages へのライブソースデプロイ
+
+MangaDex は本番ブラウザからの直接リクエストおよび画像ホットリンクを許可しておらず、OTruyen API もブラウザからの CORS リクエストを拒否します。現在の Vercel デプロイのような静的ホストではなく、リポジトリを **Cloudflare Pages** にデプロイしてください。
+
+1. Cloudflare Pages でリポジトリをインポートします。
+2. Build command に `npm run build`、Build output directory に `dist` を設定します。
+3. Pages はリポジトリ直下の `functions/` ルートを自動デプロイします。`public/_routes.json` は限定された MangaDex・OTruyen プロキシの Function 呼び出しを `/api/*` に限定します。
+4. [`.env.example`](./.env.example) を元に、Preview と Production の両方で `MANGADEX_USER_AGENT` を設定します。真実の公開 URL と連絡先を使い、`VITE_*` としてクライアントへ公開しないでください。
+5. まず Preview URL をデプロイします。MangaDex のカタログ・表紙・詳細・リーダーが同一オリジンの `/api/mangadex/*` と `/api/mangadex-image?url=...` を経由し、OTruyen のカタログ・詳細・章メタデータが `/api/otruyen/*` を経由することを確認してから本番へ昇格してください。
+
+Vite プロキシはローカル JSON 開発専用であり、本番インフラではありません。既存の Vercel デプロイは必要なプロキシを持たないため、Cloudflare Pages へ移行するまで両方のライブプロバイダーではサポートされません。
+
 ---
 
 ## ディレクトリ構成
 
 ```text
 FuuManga/
-├── public/                 # 静的アセット、フォントファイル、ライセンス表記
+├── functions/              # Cloudflare Pages Functions
+│   └── api/                # 許可リスト方式の MangaDex・OTruyen API プロキシ
+├── public/                 # 静的アセット、フォント、_routes.json
 │   └── fonts/              # Be Vietnam Pro および Barlow Condensed フォント
 ├── src/
 │   ├── App.jsx             # アプリケーション全体のレイアウト・カタログ・詳細画面
@@ -300,16 +318,19 @@ FuuManga/
 │   ├── browser.py          # E2E 回帰テスト (Playwright)
 │   └── evidence/           # 各画面幅・テーマごとの検証用スクリーンショット
 ├── index.html              # メタタグを含む HTML エントリーポイント
-├── vite.config.js          # Vite 設定および MangaDex 開発用プロキシ
+├── vite.config.js          # Vite 開発用プロキシ設定
+├── .env.example            # サーバー専用 MangaDex User-Agent テンプレート
 └── package.json            # パッケージ定義およびスクリプト
 ```
 
 ---
 
-## 既知の制約
+## プロバイダー要件
 
-- **本番環境での MangaDex CORS**: MangaDex API を本番環境で直接呼び出す際は、CORS 制限の考慮またはリバースプロキシが必要です（開発環境では Vite プロキシが対応）。
-- **OTruyen リーダー提供状況**: OTruyen の作品はメタデータおよび章一覧に対応していますが、一部の章画像については外部サーバーの配信・デジタル化状況に依存します。
+- **ライブプロバイダーには Cloudflare Pages が必要**: 同梱の Pages Functions が MangaDex の API メタデータ、表紙、AtHome 画像と OTruyen の API メタデータをアプリのオリジン経由でプロキシします。静的ホスト単体およびブラウザ直接フォールバックはサポートされません。
+- **MangaDex の識別とレート制限**: 真実の `MANGADEX_USER_AGENT` を設定してください。ドキュメントのグローバルレート制限と AtHome エンドポイントのクォータを守るため、このアプリは自動再試行を行いません。
+- **AtHome URL の有効期限**: MangaDex は AtHome ベース URL を約 15 分保証します。画像に失敗した場合、新しいエンドポイントを取得するため章をリロードする必要があります。
+- **OTruyen の提供状況**: カタログ・詳細・章 API URL は固定ホストの許可リストを経由し、CDN 画像は外部依存のままです。失敗時には再試行可能な UI を表示します。
 
 ---
 
@@ -318,3 +339,4 @@ FuuManga/
 - 本アプリケーションのソースコードは、ポートフォリオおよび学習目的で公開されています。
 - 各種フォント（`Be Vietnam Pro`, `Barlow Condensed`）および画像アセットのライセンスは [`public/fonts/`](./public/fonts/) および [`public/art/`](./public/art/) に記載されています。
 - 各漫画作品の著作権、書影、および翻訳データの権利は、原著作者・出版社・各翻訳グループに帰属します。
+- 本番リーダーでは MangaDex と該当する翻訳グループのクレジット、コンテンツ削除要求の尊重、および最新の上流規約への準拠が必要です。プロキシはブラウザ通信だけを解決し、これらの義務を代替しません。

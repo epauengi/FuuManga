@@ -55,7 +55,8 @@ Many online reading platforms suffer from intrusive advertisements, forced regis
 | Category | Technology | Purpose | Reason |
 | --- | --- | --- | --- |
 | **Frontend** | React 19 (`^19.1.1`) | UI component hierarchy and state management | Declarative rendering and hooks architecture |
-| **Build Tool** | Vite 7 (`^7.1.4`) | Development server and ESM production bundler | Instant HMR, minimal build footprint, and native proxy support |
+| **Build Tool** | Vite 7 (`^7.1.4`) | Development server and ESM production bundler | Instant HMR and minimal build footprint |
+| **Edge runtime** | Cloudflare Pages Functions | Same-origin MangaDex and OTruyen API proxy | Meets upstream CORS and MangaDex hotlink requirements without a dedicated server |
 | **Styling** | Vanilla CSS (CSS Variables) | Layout, fluid typography, dark/light themes | Zero runtime CSS-in-JS overhead; full control over responsive layouts |
 | **Typography** | Be Vietnam Pro & Barlow Condensed | Display and body text rendering | Tailored typography with native `@font-face` and `font-display: swap` |
 | **Testing** | Node.js Test Runner (`node:test`) | Unit testing core state and routing logic | Zero extra test dependencies; fast native execution |
@@ -79,10 +80,13 @@ flowchart TD
         Sources["sources.js (Multi-Source Aggregator & Cache)"]
     end
 
+    subgraph Edge ["Cloudflare Pages"]
+        Proxy["Pages Functions (/api/mangadex, /api/mangadex-image, /api/otruyen)"]
+    end
+
     subgraph Upstream ["Upstream APIs"]
-        MDProxy["Vite Dev Proxy (/api/mangadex)"]
-        MangaDex["MangaDex REST API (api.mangadex.org)"]
-        OTruyen["OTruyen REST API (otruyenapi.com)"]
+        MangaDex["MangaDex API + AtHome images"]
+        OTruyen["OTruyen API + CDN"]
     end
 
     User --> Router
@@ -94,9 +98,8 @@ flowchart TD
     Reader <--> Storage
     App --> Sources
     Reader --> Sources
-    Sources -->|Dev Environment| MDProxy --> MangaDex
-    Sources -->|Production| MangaDex
-    Sources --> OTruyen
+    Sources -->|same origin| Proxy --> MangaDex
+    Sources -->|same origin| Proxy --> OTruyen
 ```
 
 ---
@@ -179,7 +182,7 @@ External upstream manga APIs have different rate limits, response structures, an
 - Added `<Artwork />` fallback placeholders and error states when remote chapter servers fail to respond.
 
 **Result**  
-Partial upstream outages only affect the impacted source; the remaining catalog continues to load and serve chapters reliably.
+Partial upstream outages preserve the healthy catalog and identify the failed provider with a retry action. MangaDex and OTruyen API requests use narrow same-origin Cloudflare Pages Functions; MangaDex covers and chapter images use the same-origin image proxy.
 
 ---
 
@@ -200,8 +203,8 @@ Partial upstream outages only affect the impacted source; the remaining catalog 
 ### Client-Side Hash Routing (`#/`)
 
 - **Decision**: Adopted hash-based routing (`#/book/:id`, `#/read/:id/:chapter`, `#/library`).
-- **Rationale**: Enables zero-configuration static deployment on GitHub Pages, Cloudflare Pages, or static S3 buckets without requiring server-side rewrite rules for 404 fallbacks.
-- **Trade-off**: URLs include the `#` symbol.
+- **Rationale**: Keeps application navigation independent of server rewrite rules while Cloudflare Pages Functions handle only `/api/*`.
+- **Trade-off**: URLs include the `#` symbol; static-only hosts cannot serve live MangaDex content because MangaDex requires a same-origin proxy.
 
 ---
 
@@ -231,10 +234,11 @@ npm test
 ```
 
 Test suite covers:
-- Vietnamese normalization and compound diacritic filtering.
-- Route parsing and boundary conditions (malformed hashes, invalid chapter bounds, path injection).
-- Local storage schema validation, sanitization, and deduplication.
-- Storage corruption and permission denial fallbacks.
+- Vietnamese normalization, routing, local-storage validation, and corruption fallbacks.
+- Live-source adapter outcomes: valid empty results, partial provider failure, all-provider failure, book `404`, malformed payloads, and OTruyen page mapping.
+- MangaDex and OTruyen proxy allowlists, method rejection, MangaDex User-Agent forwarding, and safe response-header forwarding.
+
+`tests/browser.py` predates the live-source migration, targets removed mock routes, and is not wired into `npm test`; it is not current API coverage.
 
 ### 2. Production Build
 
@@ -282,13 +286,27 @@ npm run build
    npm run build
    ```
 
+### Deploy live sources on Cloudflare Pages
+
+MangaDex blocks direct production browser requests and hotlinked images; OTruyen's API also blocks browser CORS requests. Deploy this repository to **Cloudflare Pages**, not a static-only host such as the current Vercel deployment.
+
+1. Import the repository in Cloudflare Pages.
+2. Set build command to `npm run build` and output directory to `dist`.
+3. Pages automatically deploys root `functions/` routes. `public/_routes.json` limits the narrow MangaDex and OTruyen proxy routes to `/api/*`.
+4. Set `MANGADEX_USER_AGENT` for both Preview and Production from [`.env.example`](./.env.example). Use a truthful public URL and contact endpoint; it is server-only, never `VITE_*`.
+5. Deploy a Preview URL first. Confirm MangaDex catalog, covers, details, and reader pages use same-origin `/api/mangadex/*` and `/api/mangadex-image?url=...` requests, while OTruyen catalog, details, and chapter metadata use `/api/otruyen/*`, before promoting it.
+
+The Vite proxy supports local JSON development only. It is not production infrastructure. The existing Vercel deployment has no required proxy and remains unsupported for both live providers until the app moves to Cloudflare Pages.
+
 ---
 
 ## Project Structure
 
 ```text
 FuuManga/
-├── public/                 # Static assets, local typography, and licenses
+├── functions/              # Cloudflare Pages Functions
+│   └── api/                # Allowlisted MangaDex and OTruyen API proxies
+├── public/                 # Static assets, local typography, and _routes.json
 │   └── fonts/              # Be Vietnam Pro and Barlow Condensed fonts
 ├── src/
 │   ├── App.jsx             # Root layout, catalog, library, book detail views
@@ -302,16 +320,19 @@ FuuManga/
 │   ├── browser.py          # E2E test suite (Playwright)
 │   └── evidence/           # Screenshot evidence across viewports and themes
 ├── index.html              # HTML entry point with meta tags
-├── vite.config.js          # Vite configuration and MangaDex dev proxy
+├── vite.config.js          # Vite development proxy configuration
+├── .env.example            # Server-only MangaDex User-Agent template
 └── package.json            # Project manifest and scripts
 ```
 
 ---
 
-## Known Limitations
+## Provider Requirements
 
-- **MangaDex CORS in Production**: MangaDex API requires proxying or appropriate CORS handling. In development, a Vite proxy (`/api/mangadex`) handles requests.
-- **OTruyen Reader Availability**: OTruyen chapters are indexed for metadata; image reading for certain OTruyen entries depends on server digitization status.
+- **Cloudflare Pages is required for live providers**: The bundled Pages Functions proxy MangaDex API metadata, covers, and AtHome images, plus OTruyen API metadata, through the app origin. Static-only hosting and direct browser fallback are unsupported.
+- **MangaDex identity and rate limits**: Configure a truthful `MANGADEX_USER_AGENT`. Respect the documented global rate limit and the AtHome endpoint quota; the app intentionally does not retry requests automatically.
+- **AtHome URLs expire**: MangaDex guarantees an AtHome base URL for about 15 minutes. A failed image can require reloading the chapter to resolve a fresh endpoint.
+- **OTruyen availability**: Its catalog, detail, and chapter API URLs pass through a fixed-host allowlist; CDN images remain external. Source failures render retryable UI states.
 
 ---
 
@@ -320,3 +341,4 @@ FuuManga/
 - Application code is available for educational and portfolio demonstration purposes.
 - Font licenses (`Be Vietnam Pro`, `Barlow Condensed`) and artwork attributions are documented under [`public/fonts/`](./public/fonts/) and [`public/art/`](./public/art/).
 - Upstream manga metadata, covers, and chapter translations remain the intellectual property of their original authors, publishers, and translation scanlation groups.
+- A production reader must credit MangaDex and the relevant scanlation groups, honor content-removal requests, and comply with the current upstream terms. The proxy fixes browser transport only; it does not replace those obligations.

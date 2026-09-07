@@ -21,7 +21,7 @@ export default function Reader({ book, chapterId, history, onProgress }) {
     setLoading(true);
     setError(null);
 
-    fetchChapterPages(book.id, chapterId)
+    fetchChapterPages(book, chapterId)
       .then(res => {
         if (!active) return;
         setContent(res);

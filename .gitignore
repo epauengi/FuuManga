@@ -18,6 +18,7 @@ build/
 .copilot/
 .chat/
 .aidev/
+.tests/
 *.prompt
 *.prompt.md
 

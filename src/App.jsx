@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { filterBooks, loadState, parseRoute, saveState } from './core.mjs';
 import Reader from './Reader.jsx';
-import { DEFAULT_GENRES, fetchBook, fetchCatalog } from './sources.js';
+import { CATALOG_SOURCES, DEFAULT_GENRES, fetchBook, fetchCatalog } from './sources.js';
 
 export function Icon({ name, size = 20 }) {
   const paths = {
@@ -79,6 +79,22 @@ function Empty({ library, clear }) {
   );
 }
 
+function LoadError({ title, message, retry, home }) {
+  return (
+    <div className="empty" role="alert">
+      <Icon name="book" size={36} />
+      <h2>{title}</h2>
+      <p>{message}</p>
+      <div className="reader-actions">
+        {home && <a href="#/" className="button">Về trang chủ</a>}
+        <button className="button primary" onClick={retry}>Thử lại</button>
+      </div>
+    </div>
+  );
+}
+
+const sourceLabel = sources => sources.join(' và ');
+
 export default function App() {
   const [initial] = useState(() => {
     try { return loadState(window.localStorage, []); }
@@ -95,10 +111,14 @@ export default function App() {
   // Catalog state
   const [catalogItems, setCatalogItems] = useState([]);
   const [loadingCatalog, setLoadingCatalog] = useState(false);
+  const [catalogFailures, setCatalogFailures] = useState([]);
+  const [catalogRetry, setCatalogRetry] = useState(0);
 
   // Detail & reader state
   const [activeBook, setActiveBook] = useState(null);
   const [loadingBook, setLoadingBook] = useState(false);
+  const [bookError, setBookError] = useState('');
+  const [bookRetry, setBookRetry] = useState(0);
 
   const main = useRef(null);
 
@@ -118,16 +138,20 @@ export default function App() {
   useEffect(() => {
     let active = true;
     setLoadingCatalog(true);
+    setCatalogFailures([]);
 
     const timeout = setTimeout(() => {
       fetchCatalog({ query, genre })
-        .then(items => {
+        .then(({ items, failedSources }) => {
           if (!active) return;
           setCatalogItems(items);
+          setCatalogFailures(failedSources);
           setLoadingCatalog(false);
         })
         .catch(() => {
           if (!active) return;
+          setCatalogItems([]);
+          setCatalogFailures(CATALOG_SOURCES);
           setLoadingCatalog(false);
         });
     }, 250);
@@ -136,7 +160,7 @@ export default function App() {
       active = false;
       clearTimeout(timeout);
     };
-  }, [query, genre]);
+  }, [query, genre, catalogRetry]);
 
   // Load full book detail when visiting detail or reader route
   useEffect(() => {
@@ -145,22 +169,27 @@ export default function App() {
 
     if ((route.page === 'detail' || route.page === 'reader') && targetId) {
       setLoadingBook(true);
+      setActiveBook(null);
+      setBookError('');
       fetchBook(targetId)
-        .then(b => {
+        .then(book => {
           if (!active) return;
-          setActiveBook(b);
+          setActiveBook(book);
           setLoadingBook(false);
         })
-        .catch(() => {
+        .catch(error => {
           if (!active) return;
+          setBookError(error.message || 'Không thể tải dữ liệu truyện. Vui lòng thử lại.');
           setLoadingBook(false);
         });
     } else {
       setActiveBook(null);
+      setBookError('');
+      setLoadingBook(false);
     }
 
     return () => { active = false; };
-  }, [route.page, route.bookId, route.book]);
+  }, [route.page, route.bookId, route.book, bookRetry]);
 
   // Theme & local storage
   useEffect(() => {
@@ -394,12 +423,26 @@ export default function App() {
                 <div className="spinner" aria-hidden="true" />
                 <p>Đang tải danh mục truyện…</p>
               </div>
+            ) : catalogFailures.length === CATALOG_SOURCES.length ? (
+              <LoadError
+                title="Không thể tải kho truyện"
+                message={`Không kết nối được tới ${sourceLabel(catalogFailures)}. Vui lòng thử lại.`}
+                retry={() => setCatalogRetry(attempt => attempt + 1)}
+              />
             ) : currentDisplayList.length ? (
-              <div className="book-grid">
-                {currentDisplayList.map(book => (
-                  <Card key={book.id} book={book} />
-                ))}
-              </div>
+              <>
+                {catalogFailures.length > 0 && (
+                  <div className="warning-banner" role="alert">
+                    <Icon name="sparkles" size={16} />
+                    <span>{sourceLabel(catalogFailures)} đang gặp sự cố. Các truyện còn lại vẫn hiển thị.</span>
+                  </div>
+                )}
+                <div className="book-grid">
+                  {currentDisplayList.map(book => (
+                    <Card key={book.id} book={book} />
+                  ))}
+                </div>
+              </>
             ) : (
               <Empty library={route.page === 'library' && !state.saved.length} clear={clear} />
             )}
@@ -414,11 +457,18 @@ export default function App() {
           <section className="detail">
             <a className="back-link" href="#/">← Trở về khám phá</a>
 
-            {loadingBook && !activeBook ? (
+            {loadingBook ? (
               <div className="empty">
                 <div className="spinner" aria-hidden="true" />
                 <p>Đang tải thông tin chi tiết truyện…</p>
               </div>
+            ) : bookError ? (
+              <LoadError
+                title="Không thể tải truyện này"
+                message={bookError}
+                retry={() => setBookRetry(attempt => attempt + 1)}
+                home
+              />
             ) : activeBook ? (
               <div className="detail-grid">
                 <div className="detail-cover">
@@ -498,11 +548,18 @@ export default function App() {
         )}
 
         {route.page === 'reader' && (
-          loadingBook && !activeBook ? (
+          loadingBook ? (
             <div className="empty reader-loading">
               <div className="spinner" aria-hidden="true" />
               <p>Đang chuẩn bị dữ liệu truyện…</p>
             </div>
+          ) : bookError ? (
+            <LoadError
+              title="Không thể tải dữ liệu chương truyện"
+              message={bookError}
+              retry={() => setBookRetry(attempt => attempt + 1)}
+              home
+            />
           ) : activeBook ? (
             <Reader
               key={`${activeBook.id}-${route.chapterId || route.chapter}`}
