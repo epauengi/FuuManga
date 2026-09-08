@@ -11,6 +11,7 @@ export default {
     if (route.length !== 1 || !isSafeRoute(route[0])) return notFound();
 
     url.searchParams.delete(ROUTE_PARAM);
+    url.searchParams.delete('path');
     url.pathname = `/api/${route[0]}`;
     const publicRequest = new Request(url, { method: request.method });
     const context = { request: publicRequest, env: process.env };

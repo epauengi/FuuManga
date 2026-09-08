@@ -18,7 +18,7 @@ async function request(url, expectedUrl, expectedInit) {
 
 try {
   await request(
-    'https://app.example/api/proxy?__fuumanga_route=mangadex/manga&limit=1',
+    'https://app.example/api/proxy?__fuumanga_route=mangadex/manga&path=mangadex/manga&limit=1',
     'https://api.mangadex.org/manga?limit=1',
     init => assert.equal(init.headers['User-Agent'], process.env.MANGADEX_USER_AGENT)
   );
