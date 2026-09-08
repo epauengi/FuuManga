@@ -45,22 +45,40 @@ export function Artwork({ src, alt, className = '', eager = false }) {
   );
 }
 
-function Card({ book }) {
+function Card({ book, index }) {
+  const number = String(index + 1).padStart(2, '0');
+
   return (
     <article className="book-card">
-      <a className="cover-link" href={`#/book/${book.id}`} aria-label={`Xem ${book.title}`}>
-        <Artwork src={book.cover} alt={`Bìa ${book.title}`} />
-        <span className="cover-shade" />
-        <span className="cover-title" style={{ color: book.color }}>{book.title}</span>
-        <span className={`availability ${book.chaptersCount?.includes('Đọc ngay') ? 'ready' : ''}`}>
-          {book.chaptersCount || 'Kho truyện'}
-        </span>
-        <span className="cover-open"><Icon name="arrow" /></span>
-      </a>
-      <p className="card-genre">{(book.genres || []).join(' · ')}</p>
-      <h3><a href={`#/book/${book.id}`}>{book.title}</a></h3>
-      <p className="card-author">{book.author}</p>
+      <h3 className="book-card-title">
+        <a className="catalog-entry" href={`#/book/${book.id}`} aria-label={`Xem ${book.title}`}>
+          <span className="entry-media">
+            <Artwork src={book.cover} alt={`Bìa ${book.title}`} />
+          </span>
+          <span className="entry-record">
+            <span className="entry-topline">
+              <span className="entry-index">{number}</span>
+              <span className={`availability ${book.chaptersCount?.includes('Đọc ngay') ? 'ready' : ''}`}>
+                {book.chaptersCount || 'Kho truyện'}
+              </span>
+            </span>
+            <span className="card-genre">{(book.genres || []).join(' · ')}</span>
+            <span className="entry-title">{book.title}</span>
+            <span className="card-author">{book.author}</span>
+          </span>
+          <span className="entry-arrow"><Icon name="arrow" /></span>
+        </a>
+      </h3>
     </article>
+  );
+}
+
+function CatalogSkeleton() {
+  return (
+    <div className="catalog-skeleton" aria-busy="true" aria-live="polite">
+      <span className="sr-only">Đang tải danh mục truyện…</span>
+      {[0, 1, 2, 3, 4].map(index => <div className="skeleton-entry" key={index} aria-hidden="true" />)}
+    </div>
   );
 }
 
@@ -290,61 +308,48 @@ export default function App() {
         </div>
       )}
 
-      <main id="main" ref={main} tabIndex="-1">
+      <main id="main" className={`page page--${route.page}`} ref={main} tabIndex="-1">
         {route.page === 'home' && (
           <>
             <section className="hero">
               <div className="hero-copy">
-                <p className="eyebrow"><span /> KHO TRUYỆN TRANH TUYỂN CHỌN</p>
+                <p className="eyebrow"><span /> MỤC LỤC SỐ FUU</p>
                 <h1>Lật một trang.<br />Mở <em>ngàn thế giới.</em></h1>
                 <p className="hero-description">
-                  Hàng ngàn chương truyện tranh hấp dẫn với bản dịch tiếng Việt mượt mà.<br className="desktop-break" />
-                  Đọc ngay trên web, cập nhật liên tục, lưu tiến độ và thư viện hoàn toàn riêng tư.
+                  Bản dịch tiếng Việt từ MangaDex. Đọc trên web, lưu tiến độ và giữ riêng thư viện của bạn trên thiết bị này.
                 </p>
                 <div className="hero-actions">
-                  {featured ? (
-                    <a className="button primary" href={`#/book/${featured.id}`}>
-                      <Icon name="book" />Đọc truyện mới nhất
-                      <span className="arrow-circle"><Icon name="arrow" size={18} /></span>
-                    </a>
-                  ) : (
-                    <a className="button primary" href="#catalog-heading">
-                      <Icon name="search" />Khám phá ngay
-                      <span className="arrow-circle"><Icon name="arrow" size={18} /></span>
-                    </a>
-                  )}
+                  <a className="button primary" href="#catalog-heading">
+                    <Icon name="search" />Mở mục lục <Icon name="arrow" size={18} />
+                  </a>
                 </div>
-                <div className="hero-foot">
-                  <span className="small-star">✦</span>
-                  <span>Đọc mượt mà · Tải nhanh chóng · Tự do khám phá.</span>
-                </div>
+                <p className="hero-foot">Một kho truyện. Một nơi để quay lại đúng trang đang đọc.</p>
               </div>
 
-              {featured && (
-                <div className="hero-art" aria-label={`Truyện nổi bật ${featured.title}`}>
-                  <div className="orbit-word" aria-hidden="true">CẬP NHẬT MỚI LIÊN TỤC</div>
-                  <a href={`#/book/${featured.id}`} className="hero-cover">
-                    <Artwork src={featured.cover} alt={featured.title} eager />
-                    <span className="hero-cover-text">
-                      <small>NỔI BẬT</small>
+              <div className={`featured-record ${featured ? 'is-ready' : loadingCatalog ? 'is-loading' : ''}`}>
+                {featured ? (
+                  <a href={`#/book/${featured.id}`} className="featured-link">
+                    <span className="featured-media"><Artwork src={featured.cover} alt={`Bìa ${featured.title}`} eager /></span>
+                    <span className="featured-copy">
+                      <span className="featured-index">Mục 01 <i>Truyện mới</i></span>
                       <strong>{featured.title}</strong>
-                      <span>{(featured.genres || []).slice(0, 2).join(' · ').toUpperCase()}</span>
+                      <span className="featured-genre">{(featured.genres || []).slice(0, 2).join(' · ') || 'MangaDex'}</span>
+                      <span className="featured-author">{featured.author || 'Đang cập nhật tác giả'}</span>
+                      <span className="featured-open">Mở truyện <Icon name="arrow" /></span>
                     </span>
                   </a>
-                  <span className="hero-sticker">Đọc ngay<br /><b>Mỗi ngày</b></span>
-                  <div className="featured-caption">
-                    <span className="caption-line" />
-                    <span>NỔI BẬT HÔM NAY</span>
-                    <b>Tuyển chọn</b>
+                ) : (
+                  <div className="featured-placeholder" aria-hidden="true">
+                    <span /><span /><span /><span />
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </section>
 
-            <div className="editorial-strip">
-              <span>TRUYỆN TRANH TRỰC TUYẾN</span>
-              <span>Bản dịch mượt mà <i>✦</i> Cập nhật liên tục</span>
-              <span>TỦ SÁCH RIÊNG TƯ</span>
+            <div className="index-rail" aria-label="Thông tin FuuManga">
+              <span>MANGADEX · BẢN DỊCH TIẾNG VIỆT</span>
+              <span>TIẾN ĐỘ LƯU TRÊN THIẾT BỊ</span>
+              <span>{loadingCatalog ? 'ĐANG LẬP MỤC…' : `${catalogItems.length} TỰA TRUYỆN`}</span>
             </div>
 
             {recent && (
@@ -367,7 +372,7 @@ export default function App() {
         )}
 
         {(route.page === 'home' || route.page === 'library') && (
-          <section className="catalog" id="catalog-heading" aria-labelledby="catalog-title">
+          <section className={`catalog catalog--${route.page}`} id="catalog-heading" aria-labelledby="catalog-title">
             <div className="section-heading">
               <div>
                 <p className="eyebrow">{route.page === 'library' ? 'GÓC RIÊNG CỦA BẠN' : 'CHỌN MỘT CÂU CHUYỆN'}</p>
@@ -416,10 +421,7 @@ export default function App() {
             </div>
 
             {loadingCatalog ? (
-              <div className="empty catalog-loading">
-                <div className="spinner" aria-hidden="true" />
-                <p>Đang tải danh mục truyện…</p>
-              </div>
+              <CatalogSkeleton />
             ) : catalogError ? (
               <LoadError
                 title="Không thể tải kho truyện"
@@ -428,8 +430,8 @@ export default function App() {
               />
             ) : currentDisplayList.length ? (
               <div className="book-grid">
-                {currentDisplayList.map(book => (
-                  <Card key={book.id} book={book} />
+                {currentDisplayList.map((book, index) => (
+                  <Card key={book.id} book={book} index={index} />
                 ))}
               </div>
             ) : (
@@ -462,7 +464,6 @@ export default function App() {
               <div className="detail-grid">
                 <div className="detail-cover">
                   <Artwork src={activeBook.cover} alt={`Bìa ${activeBook.title}`} eager />
-                  <span style={{ color: activeBook.color }}>{activeBook.title}</span>
                 </div>
 
                 <div className="detail-copy">
