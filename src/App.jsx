@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { filterBooks, loadState, parseRoute, saveState } from './core.mjs';
 import Reader from './Reader.jsx';
-import { CATALOG_SOURCES, DEFAULT_GENRES, fetchBook, fetchCatalog } from './sources.js';
+import { DEFAULT_GENRES, fetchBook, fetchCatalog } from './sources.js';
 
 export function Icon({ name, size = 20 }) {
   const paths = {
@@ -93,8 +93,6 @@ function LoadError({ title, message, retry, home }) {
   );
 }
 
-const sourceLabel = sources => sources.join(' và ');
-
 export default function App() {
   const [initial] = useState(() => {
     try { return loadState(window.localStorage, []); }
@@ -111,7 +109,7 @@ export default function App() {
   // Catalog state
   const [catalogItems, setCatalogItems] = useState([]);
   const [loadingCatalog, setLoadingCatalog] = useState(false);
-  const [catalogFailures, setCatalogFailures] = useState([]);
+  const [catalogError, setCatalogError] = useState('');
   const [catalogRetry, setCatalogRetry] = useState(0);
 
   // Detail & reader state
@@ -138,20 +136,19 @@ export default function App() {
   useEffect(() => {
     let active = true;
     setLoadingCatalog(true);
-    setCatalogFailures([]);
+    setCatalogError('');
 
     const timeout = setTimeout(() => {
       fetchCatalog({ query, genre })
-        .then(({ items, failedSources }) => {
+        .then(items => {
           if (!active) return;
           setCatalogItems(items);
-          setCatalogFailures(failedSources);
           setLoadingCatalog(false);
         })
-        .catch(() => {
+        .catch(error => {
           if (!active) return;
           setCatalogItems([]);
-          setCatalogFailures(CATALOG_SOURCES);
+          setCatalogError(error.message || 'Không thể tải kho truyện. Vui lòng thử lại.');
           setLoadingCatalog(false);
         });
     }, 250);
@@ -423,26 +420,18 @@ export default function App() {
                 <div className="spinner" aria-hidden="true" />
                 <p>Đang tải danh mục truyện…</p>
               </div>
-            ) : catalogFailures.length === CATALOG_SOURCES.length ? (
+            ) : catalogError ? (
               <LoadError
                 title="Không thể tải kho truyện"
-                message={`Không kết nối được tới ${sourceLabel(catalogFailures)}. Vui lòng thử lại.`}
+                message={catalogError}
                 retry={() => setCatalogRetry(attempt => attempt + 1)}
               />
             ) : currentDisplayList.length ? (
-              <>
-                {catalogFailures.length > 0 && (
-                  <div className="warning-banner" role="alert">
-                    <Icon name="sparkles" size={16} />
-                    <span>{sourceLabel(catalogFailures)} đang gặp sự cố. Các truyện còn lại vẫn hiển thị.</span>
-                  </div>
-                )}
-                <div className="book-grid">
-                  {currentDisplayList.map(book => (
-                    <Card key={book.id} book={book} />
-                  ))}
-                </div>
-              </>
+              <div className="book-grid">
+                {currentDisplayList.map(book => (
+                  <Card key={book.id} book={book} />
+                ))}
+              </div>
             ) : (
               <Empty library={route.page === 'library' && !state.saved.length} clear={clear} />
             )}

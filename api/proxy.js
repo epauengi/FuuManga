@@ -1,6 +1,5 @@
 import { onRequest as mangaDex } from '../functions/api/mangadex/[[path]].js';
 import { onRequest as mangaDexImage } from '../functions/api/mangadex-image.js';
-import { onRequest as oTruyen } from '../functions/api/otruyen/[[path]].js';
 
 const ROUTE_PARAM = '__fuumanga_route';
 
@@ -18,7 +17,6 @@ export default {
 
     if (route[0] === 'mangadex-image') return mangaDexImage(context);
     if (isRoute(route[0], 'mangadex')) return mangaDex(context);
-    if (isRoute(route[0], 'otruyen')) return oTruyen(context);
     return notFound();
   }
 };

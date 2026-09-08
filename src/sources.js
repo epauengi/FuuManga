@@ -10,13 +10,7 @@ export const DEFAULT_GENRES = [
   'Supernatural'
 ];
 
-export const CATALOG_SOURCES = ['MangaDex', 'OTruyen'];
-
 const MD_BASE = '/api/mangadex';
-const OT_BASE = '/api/otruyen';
-const OT_IMG = 'https://img.otruyenapi.com/uploads/comics';
-// ponytail: only OTruyen's current sv1 chapter endpoint; add a fixed host allowlist if it introduces another API host.
-const OT_CHAPTER_HOST = 'sv1.otruyencdn.com';
 const cache = new Map();
 
 export function mangaDexAssetUrl(url) {
@@ -25,49 +19,21 @@ export function mangaDexAssetUrl(url) {
 }
 
 export async function fetchCatalog({ query = '', genre = 'Tất cả' } = {}) {
-  const sources = [
-    ['MangaDex', () => getMangaDexCatalog(query, genre)],
-    ['OTruyen', () => getOTruyenCatalog(query, genre)]
-  ];
-  const results = await Promise.allSettled(sources.map(([, load]) => load()));
-  const items = [];
-  const failedSources = [];
-
-  results.forEach((result, index) => {
-    if (result.status === 'fulfilled') items.push(...result.value);
-    else failedSources.push(sources[index][0]);
-  });
-
-  return { items, failedSources };
+  return getMangaDexCatalog(query, genre);
 }
 
 export async function fetchBook(id) {
+  if (!id?.startsWith('md-')) return null;
   if (cache.has(id)) return cache.get(id);
 
-  const [source, rawId] = splitId(id);
-  const book = source === 'md'
-    ? await fetchMangaDexBook(rawId)
-    : source === 'ot'
-      ? await fetchOTruyenBook(rawId)
-      : null;
-
+  const book = await fetchMangaDexBook(id.slice(3));
   if (book) cache.set(book.id, book);
   return book;
 }
 
 export async function fetchChapterPages(book, chapterId) {
-  const [source] = splitId(book?.id);
-
-  if (source === 'md') return fetchMangaDexChapterPages(chapterId);
-  if (source === 'ot') return fetchOTruyenChapterPages(book, chapterId);
-  throw new Error('Không tìm thấy chương truyện yêu cầu');
-}
-
-export function splitId(id) {
-  if (!id) return ['', ''];
-  if (id.startsWith('md-')) return ['md', id.slice(3)];
-  if (id.startsWith('ot-')) return ['ot', id.slice(3)];
-  return ['', id];
+  if (!book?.id?.startsWith('md-')) throw new Error('Không tìm thấy chương truyện yêu cầu');
+  return fetchMangaDexChapterPages(chapterId);
 }
 
 async function getMangaDexCatalog(query, genre) {
@@ -129,60 +95,6 @@ async function fetchMangaDexChapterPages(chapterId) {
   };
 }
 
-async function getOTruyenCatalog(query, genre) {
-  const url = query
-    ? `${OT_BASE}/tim-kiem?keyword=${encodeURIComponent(query)}`
-    : `${OT_BASE}/danh-sach/truyen-moi?page=1`;
-  const json = await fetchJson(url, 'OTruyen');
-  const data = requireObject(json.data, 'OTruyen', 'danh mục truyện');
-  const items = requireArray(data.items, 'OTruyen', 'danh mục truyện');
-  const books = items.map(mapOTruyenCatalogItem).filter(Boolean);
-  return filterGenre(books, genre);
-}
-
-async function fetchOTruyenBook(slug) {
-  const json = await fetchJson(`${OT_BASE}/truyen-tranh/${encodeURIComponent(slug)}`, 'OTruyen', { notFound: true });
-  if (!json) return null;
-
-  const item = requireObject(json.data?.item, 'OTruyen', 'thông tin truyện');
-  const chapters = mapOTruyenChapters(item.chapters);
-
-  return {
-    id: `ot-${item.slug}`,
-    rawId: item.slug,
-    title: item.name || 'Truyện tranh',
-    subtitle: 'Kho truyện tranh tuyển chọn',
-    author: Array.isArray(item.author) ? item.author.join(', ') : (item.author || 'Đang cập nhật'),
-    genres: Array.isArray(item.category) ? item.category.map(category => category?.name).filter(Boolean) : [],
-    cover: item.thumb_url ? `${OT_IMG}/${item.thumb_url}` : '',
-    color: '#edbb97',
-    description: item.content ? item.content.replace(/<[^>]*>/g, '') : '',
-    chapters
-  };
-}
-
-async function fetchOTruyenChapterPages(book, chapterId) {
-  const chapter = book?.chapters?.find(item => String(item.id) === String(chapterId));
-  if (!chapter?.apiData) throw new Error('Không tìm thấy chương truyện yêu cầu');
-
-  const json = await fetchJson(chapter.apiData, 'OTruyen');
-  const data = requireObject(json.data, 'OTruyen', 'dữ liệu chương');
-  const item = requireObject(data.item, 'OTruyen', 'dữ liệu chương');
-  const domain = validHttpsUrl(data.domain_cdn);
-  const chapterPath = typeof item.chapter_path === 'string' ? item.chapter_path.replace(/^\/+|\/+$/g, '') : '';
-  const pages = requireArray(item.chapter_image, 'OTruyen', 'trang truyện');
-
-  if (!domain || !chapterPath || !pages.length || pages.some(page => typeof page?.image_file !== 'string' || !page.image_file)) {
-    throw providerError('OTruyen', 'Dữ liệu chương không hợp lệ');
-  }
-
-  const prefix = `${domain.replace(/\/+$/, '')}/${chapterPath}`;
-  return {
-    type: 'image',
-    images: pages.map(page => `${prefix}/${encodeURIComponent(page.image_file)}`)
-  };
-}
-
 function mapMangaDexCatalogItem(manga) {
   if (!manga?.id || !manga.attributes) return null;
 
@@ -209,58 +121,6 @@ function mapMangaDexChapter(chapter, index) {
     chapterNum: number,
     title: name ? `Chương ${number}: ${name}` : `Chương ${number}`
   };
-}
-
-function mapOTruyenCatalogItem(item) {
-  if (!item?.slug) return null;
-
-  return {
-    id: `ot-${item.slug}`,
-    rawId: item.slug,
-    title: item.name || 'Truyện tranh',
-    subtitle: 'Kho truyện tranh tuyển chọn',
-    author: Array.isArray(item.author) && item.author[0] ? item.author[0] : 'Đang cập nhật',
-    genres: Array.isArray(item.category) ? item.category.map(category => category?.name).filter(Boolean).slice(0, 3) : [],
-    cover: item.thumb_url ? `${OT_IMG}/${item.thumb_url}` : '',
-    color: '#edbb97',
-    description: 'Tuyển tập truyện tranh đặc sắc.',
-    chaptersCount: `${item.chaptersLatest?.[0]?.chapter_name || 'Nhiều'} chương`
-  };
-}
-
-function mapOTruyenChapters(groups) {
-  if (!Array.isArray(groups)) return [];
-
-  const seen = new Set();
-  return groups.flatMap(group => Array.isArray(group?.server_data) ? group.server_data : [])
-    .map((chapter, index) => {
-      const number = String(chapter?.chapter_name || index + 1);
-      const apiData = oTruyenChapterApiUrl(chapter?.chapter_api_data);
-      if (!apiData || seen.has(number)) return null;
-      seen.add(number);
-      return {
-        id: number,
-        chapterNum: number,
-        title: `Chương ${number}${chapter.chapter_title ? ': ' + chapter.chapter_title : ''}`,
-        apiData
-      };
-    })
-    .filter(Boolean);
-}
-
-function oTruyenChapterApiUrl(value) {
-  let url;
-  try {
-    url = new URL(value);
-  } catch {
-    return '';
-  }
-
-  const match = url.pathname.match(/^\/v1\/api\/chapter\/([a-f0-9]{24})$/i);
-  if (url.protocol !== 'https:' || url.hostname !== OT_CHAPTER_HOST || url.username || url.password || url.search || url.hash || !match) {
-    return '';
-  }
-  return `${OT_BASE}/chapter/${match[1]}`;
 }
 
 function mangaDexCover(manga, size) {

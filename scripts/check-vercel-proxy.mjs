@@ -27,19 +27,14 @@ try {
     'https://uploads.mangadex.org/covers/id/file.jpg',
     init => assert.equal(init.headers, undefined)
   );
-  await request(
-    'https://app.example/api/proxy?__fuumanga_route=otruyen%2Fdanh-sach%2Ftruyen-moi&page=1',
-    'https://otruyenapi.com/v1/api/danh-sach/truyen-moi?page=1',
-    init => assert.equal(init.credentials, 'omit')
-  );
-
   let calls = 0;
   globalThis.fetch = async () => { calls += 1; return new Response(); };
   for (const url of [
     'https://app.example/api/proxy',
     'https://app.example/api/proxy?__fuumanga_route=unknown',
     'https://app.example/api/proxy?__fuumanga_route=mangadex%2F..%2Fsecret',
-    'https://app.example/api/proxy?__fuumanga_route=mangadex&__fuumanga_route=otruyen'
+    'https://app.example/api/proxy?__fuumanga_route=otruyen%2Fdanh-sach%2Ftruyen-moi',
+    'https://app.example/api/proxy?__fuumanga_route=mangadex&__fuumanga_route=mangadex-image'
   ]) {
     const response = await proxy.fetch(new Request(url));
     assert.equal(response.status, 404);

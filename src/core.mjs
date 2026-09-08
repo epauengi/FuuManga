@@ -15,7 +15,7 @@ export function parseRoute(hash, books = []) {
     if (parts[0] === 'book' && id && parts.length === 2) {
       const book = books.find(b => b.id === id || b.rawId === id);
       if (book) return { page: 'detail', book, bookId: book.id };
-      if (/^(md-[a-f0-9-]+|ot-[a-z0-9-]+)$/.test(id)) {
+      if (/^md-[a-f0-9-]+$/.test(id)) {
         return { page: 'detail', bookId: id };
       }
     }
@@ -30,7 +30,7 @@ export function parseRoute(hash, books = []) {
         }
         return { page: 'notFound' };
       }
-      if (/^(md-[a-f0-9-]+|ot-[a-z0-9-]+)$/.test(id)) {
+      if (/^md-[a-f0-9-]+$/.test(id)) {
         return { page: 'reader', bookId: id, chapterId: chapterParam, chapter: Number(chapterParam) || 1 };
       }
     }
@@ -46,7 +46,7 @@ export function validateState(value, books = []) {
   clean.theme = value.theme === 'light' ? 'light' : 'dark';
 
   const isIdValid = id => books.some(b => b.id === id || b.rawId === id) ||
-    /^(md-[a-f0-9-]+|ot-[a-z0-9-]+)$/.test(id);
+    /^md-[a-f0-9-]+$/.test(id);
 
   if (Array.isArray(value.saved)) {
     clean.saved = [...new Set(value.saved.filter(isIdValid))];
