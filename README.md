@@ -56,7 +56,7 @@ Many online reading platforms suffer from intrusive advertisements, forced regis
 | --- | --- | --- | --- |
 | **Frontend** | React 19 (`^19.1.1`) | UI component hierarchy and state management | Declarative rendering and hooks architecture |
 | **Build Tool** | Vite 7 (`^7.1.4`) | Development server and ESM production bundler | Instant HMR and minimal build footprint |
-| **Edge runtime** | Cloudflare Pages Functions | Same-origin MangaDex and OTruyen API proxy | Meets upstream CORS and MangaDex hotlink requirements without a dedicated server |
+| **Server runtime** | Vercel Functions | Same-origin MangaDex and OTruyen API proxy | Meets upstream CORS and MangaDex hotlink requirements without a dedicated server |
 | **Styling** | Vanilla CSS (CSS Variables) | Layout, fluid typography, dark/light themes | Zero runtime CSS-in-JS overhead; full control over responsive layouts |
 | **Typography** | Be Vietnam Pro & Barlow Condensed | Display and body text rendering | Tailored typography with native `@font-face` and `font-display: swap` |
 | **Testing** | Node.js Test Runner (`node:test`) | Unit testing core state and routing logic | Zero extra test dependencies; fast native execution |
@@ -80,8 +80,8 @@ flowchart TD
         Sources["sources.js (Multi-Source Aggregator & Cache)"]
     end
 
-    subgraph Edge ["Cloudflare Pages"]
-        Proxy["Pages Functions (/api/mangadex, /api/mangadex-image, /api/otruyen)"]
+    subgraph Edge ["Vercel"]
+        Proxy["Vercel Functions (/api/mangadex, /api/mangadex-image, /api/otruyen)"]
     end
 
     subgraph Upstream ["Upstream APIs"]
@@ -182,7 +182,7 @@ External upstream manga APIs have different rate limits, response structures, an
 - Added `<Artwork />` fallback placeholders and error states when remote chapter servers fail to respond.
 
 **Result**  
-Partial upstream outages preserve the healthy catalog and identify the failed provider with a retry action. MangaDex and OTruyen API requests use narrow same-origin Cloudflare Pages Functions; MangaDex covers and chapter images use the same-origin image proxy.
+Partial upstream outages preserve the healthy catalog and identify the failed provider with a retry action. MangaDex and OTruyen API requests use narrow same-origin Vercel Functions; MangaDex covers and chapter images use the same-origin image proxy.
 
 ---
 
@@ -203,7 +203,7 @@ Partial upstream outages preserve the healthy catalog and identify the failed pr
 ### Client-Side Hash Routing (`#/`)
 
 - **Decision**: Adopted hash-based routing (`#/book/:id`, `#/read/:id/:chapter`, `#/library`).
-- **Rationale**: Keeps application navigation independent of server rewrite rules while Cloudflare Pages Functions handle only `/api/*`.
+- **Rationale**: Keeps application navigation independent of server rewrite rules while Vercel Functions handle only `/api/*`.
 - **Trade-off**: URLs include the `#` symbol; static-only hosts cannot serve live MangaDex content because MangaDex requires a same-origin proxy.
 
 ---
@@ -227,7 +227,7 @@ Partial upstream outages preserve the healthy catalog and identify the failed pr
 
 Open [fuumanga.vercel.app](https://fuumanga.vercel.app) to explore FuuManga. No download, account, or setup is required.
 
-Catalogs and chapters come from external providers, so a temporary provider outage may limit available titles. The app shows a retry action when that happens.
+Catalogs and chapters come from external providers through the server proxy, so a temporary provider outage may limit available titles. The app shows a retry action when that happens.
 
 ---
 

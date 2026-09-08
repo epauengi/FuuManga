@@ -56,7 +56,7 @@ FuuManga は、デスクトップ・タブレット・スマートフォンの�
 | --- | --- | --- | --- |
 | **Frontend** | React 19 (`^19.1.1`) | UI コンポーネントおよび状態管理 | 宣言的 UI 設計と最新 Hooks API の活用 |
 | **Build Tool** | Vite 7 (`^7.1.4`) | 開発サーバーおよび ESM 本番ビルド | 高速な HMR、最小限のバンドルサイズ |
-| **Edge Runtime** | Cloudflare Pages Functions | MangaDex・OTruyen API の同一オリジンプロキシ | 専用サーバーなしで上流 CORS と MangaDex のホットリンク要件に対応 |
+| **Server Runtime** | Vercel Functions | MangaDex・OTruyen API の同一オリジンプロキシ | 専用サーバーなしで上流 CORS と MangaDex のホットリンク要件に対応 |
 | **Styling** | Vanilla CSS (CSS Variables) | レイアウト、流体タイポグラフィ、テーマ | ランタイムオーバーヘッドの排除、端末幅に応じた細やかな表示制御 |
 | **Typography** | Be Vietnam Pro / Barlow Condensed | タイトルおよび本文テキスト表示 | 自前ホストフォント（`font-display: swap`）による表示安定化 |
 | **Testing** | Node.js Test Runner (`node:test`) | コアロジック（状態・ルーティング）の単体テスト | 外部テストライブラリ不要で高速に実行できるネイティブ機能 |
@@ -80,8 +80,8 @@ flowchart TD
         Sources["sources.js (データ統合・インメモリキャッシュ)"]
     end
 
-    subgraph Edge ["Cloudflare Pages"]
-        Proxy["Pages Functions (/api/mangadex, /api/mangadex-image, /api/otruyen)"]
+    subgraph Edge ["Vercel"]
+        Proxy["Vercel Functions (/api/mangadex, /api/mangadex-image, /api/otruyen)"]
     end
 
     subgraph Upstream ["外部データソース"]
@@ -182,7 +182,7 @@ const observer = new IntersectionObserver(entries => {
 - 画像取得失敗時の `<Artwork />` 代替表示と、エラー時の案内 UI を整備。
 
 **結果**  
-一部の外部サーバーで障害が発生した場合でも、正常なカタログを維持し、失敗したプロバイダーと再試行操作を表示します。MangaDex と OTruyen の API リクエストは限定された同一オリジンの Cloudflare Pages Function を経由し、MangaDex の表紙・章画像も同一オリジンの画像プロキシを経由します。
+一部の外部サーバーで障害が発生した場合でも、正常なカタログを維持し、失敗したプロバイダーと再試行操作を表示します。MangaDex と OTruyen の API リクエストは限定された同一オリジンの Vercel Function を経由し、MangaDex の表紙・章画像も同一オリジンの画像プロキシを経由します。
 
 ---
 
@@ -203,7 +203,7 @@ const observer = new IntersectionObserver(entries => {
 ### クライアントサイド Hash ルーティング (`#/`)
 
 - **判断**: History API の代わりに Hash ルーティング（`#/book/:id`, `#/read/:id/:chapter`, `#/library`）を採用。
-- **理由**: Cloudflare Pages Functions が `/api/*` のみを処理する一方、アプリケーションのナビゲーションをサーバー側リライトから独立させるため。
+- **理由**: Vercel Functions が `/api/*` のみを処理する一方、アプリケーションのナビゲーションをサーバー側リライトから独立させるため。
 - **トレードオフ**: URL に `#` が含まれます。MangaDex は同一オリジンプロキシを要求するため、静的ホスト単体ではライブコンテンツを提供できません。
 
 ---
@@ -227,7 +227,7 @@ const observer = new IntersectionObserver(entries => {
 
 [fuumanga.vercel.app](https://fuumanga.vercel.app) を開けば、FuuManga をすぐに閲覧できます。ダウンロード、アカウント登録、セットアップは不要です。
 
-カタログと章は外部プロバイダーから提供されるため、一時的な障害で利用できる作品が限られる場合があります。その場合、アプリ内に再試行操作が表示されます。
+カタログと章はサーバープロキシ経由で外部プロバイダーから提供されるため、一時的な障害で利用できる作品が限られる場合があります。その場合、アプリ内に再試行操作が表示されます。
 
 ---
 

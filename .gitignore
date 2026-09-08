@@ -51,6 +51,7 @@ Thumbs.db
 desktop.ini
 
 # Test, coverage & temp
+tests/
 coverage/
 .nyc_output/
 *.tmp
