@@ -5,28 +5,58 @@ const previousFetch = globalThis.fetch;
 const previousUserAgent = process.env.MANGADEX_USER_AGENT;
 process.env.MANGADEX_USER_AGENT = 'FuuManga/1.0 (+https://app.example/contact)';
 
-async function request(url, expectedUrl, expectedInit) {
+async function request(url, expectedUrl, expectedInit, upstream) {
   globalThis.fetch = async (input, init) => {
     assert.equal(String(input), expectedUrl);
     expectedInit(init);
-    return new Response('{"data":[]}', { headers: { 'content-type': 'application/json' } });
+    return upstream;
   };
   const response = await proxy.fetch(new Request(url));
   assert.equal(response.status, 200);
-  assert.equal(await response.text(), '{"data":[]}');
+  return response;
 }
 
 try {
-  await request(
+  const apiResponse = await request(
     'https://app.example/api/proxy?__fuumanga_route=mangadex/manga&path=mangadex/manga&limit=1',
     'https://api.mangadex.org/manga?limit=1',
-    init => assert.equal(init.headers['User-Agent'], process.env.MANGADEX_USER_AGENT)
+    init => assert.equal(init.headers['User-Agent'], process.env.MANGADEX_USER_AGENT),
+    new Response('{"data":["full response"]}', {
+      headers: {
+        'content-type': 'application/json',
+        'content-length': '10',
+        'content-encoding': 'gzip',
+        'cache-control': 'public, max-age=15',
+        etag: '"catalog"',
+        'last-modified': 'Tue, 08 Sep 2026 00:00:00 GMT'
+      }
+    })
   );
-  await request(
+  assert.deepEqual(await apiResponse.json(), { data: ['full response'] });
+  assert.equal(apiResponse.headers.get('content-length'), null);
+  assert.equal(apiResponse.headers.get('content-encoding'), null);
+  assert.equal(apiResponse.headers.get('cache-control'), 'public, max-age=15');
+  assert.equal(apiResponse.headers.get('etag'), '"catalog"');
+  assert.equal(apiResponse.headers.get('last-modified'), 'Tue, 08 Sep 2026 00:00:00 GMT');
+
+  const imageResponse = await request(
     'https://app.example/api/proxy?__fuumanga_route=mangadex-image&url=https%3A%2F%2Fuploads.mangadex.org%2Fcovers%2Fid%2Ffile.jpg',
     'https://uploads.mangadex.org/covers/id/file.jpg',
-    init => assert.equal(init.headers, undefined)
+    init => assert.equal(init.headers, undefined),
+    new Response(new Uint8Array([1, 2, 3, 4]), {
+      headers: {
+        'content-type': 'image/jpeg',
+        'content-length': '2',
+        'content-encoding': 'gzip',
+        etag: '"cover"'
+      }
+    })
   );
+  assert.deepEqual([...new Uint8Array(await imageResponse.arrayBuffer())], [1, 2, 3, 4]);
+  assert.equal(imageResponse.headers.get('content-type'), 'image/jpeg');
+  assert.equal(imageResponse.headers.get('content-length'), null);
+  assert.equal(imageResponse.headers.get('content-encoding'), null);
+  assert.equal(imageResponse.headers.get('etag'), '"cover"');
   let calls = 0;
   globalThis.fetch = async () => { calls += 1; return new Response(); };
   for (const url of [

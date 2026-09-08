@@ -1,5 +1,5 @@
 const API_PREFIX = '/api/mangadex';
-const SAFE_HEADERS = ['content-type', 'content-length', 'cache-control', 'etag', 'last-modified'];
+const SAFE_HEADERS = ['content-type', 'cache-control', 'etag', 'last-modified'];
 
 export function buildMangaDexApiUrl(requestUrl) {
   const path = requestUrl.pathname.slice(API_PREFIX.length) || '/';

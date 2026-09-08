@@ -1,4 +1,4 @@
-const SAFE_HEADERS = ['content-type', 'content-length', 'cache-control', 'etag', 'last-modified'];
+const SAFE_HEADERS = ['content-type', 'cache-control', 'etag', 'last-modified'];
 
 export function isAllowedMangaDexImageUrl(value) {
   let url;
