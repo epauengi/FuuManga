@@ -259,6 +259,7 @@ export default function App() {
           setState(s => ({ ...s, theme: nextTheme }));
         });
       });
+      transition.finished.catch(() => {});
 
       await transition.ready;
 
@@ -270,7 +271,7 @@ export default function App() {
           ]
         },
         {
-          duration: 600,
+          duration: 950,
           easing: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)',
           pseudoElement: '::view-transition-new(root)'
         }
