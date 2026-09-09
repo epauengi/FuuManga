@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { filterBooks, loadState, orderChapters, parseRoute, saveState } from './core.mjs';
 import Reader from './Reader.jsx';
 import { DEFAULT_GENRES, fetchBook, fetchCatalog } from './sources.js';
@@ -223,6 +224,66 @@ export default function App() {
     document.title = `${bookTitle || (route.page === 'library' ? 'Thư viện của bạn' : 'Kho truyện tiếng Việt trực tuyến')} — FuuManga`;
   }, [route, activeBook]);
 
+  const themeButtonRef = useRef(null);
+  const isThemeTransitioning = useRef(false);
+
+  // ponytail: View Transition Wave Ripple; fall back to instant theme toggle when API unavailable or reduced-motion set.
+  const toggleTheme = useCallback(async () => {
+    const nextTheme = state.theme === 'dark' ? 'light' : 'dark';
+
+    if (
+      !document.startViewTransition ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      document.documentElement.dataset.theme = nextTheme;
+      setState(s => ({ ...s, theme: nextTheme }));
+      return;
+    }
+
+    if (isThemeTransitioning.current) return;
+    isThemeTransitioning.current = true;
+
+    const btn = themeButtonRef.current;
+    const rect = btn?.getBoundingClientRect();
+    const x = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+    const y = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
+    const maxRadius = Math.hypot(
+      Math.max(x, window.innerWidth - x),
+      Math.max(y, window.innerHeight - y)
+    );
+
+    try {
+      const transition = document.startViewTransition(() => {
+        flushSync(() => {
+          document.documentElement.dataset.theme = nextTheme;
+          setState(s => ({ ...s, theme: nextTheme }));
+        });
+      });
+
+      await transition.ready;
+
+      const animation = document.documentElement.animate(
+        {
+          clipPath: [
+            `circle(0% at ${x}px ${y}px)`,
+            `circle(${maxRadius}px at ${x}px ${y}px)`
+          ]
+        },
+        {
+          duration: 600,
+          easing: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+          pseudoElement: '::view-transition-new(root)'
+        }
+      );
+
+      await animation.finished;
+    } catch {
+      // Transition interrupted or aborted
+    } finally {
+      isThemeTransitioning.current = false;
+    }
+  }, [state.theme]);
+
   // Notice auto hide
   useEffect(() => {
     if (!notice) return;
@@ -298,9 +359,10 @@ export default function App() {
         <div className="header-end">
           <span className="header-note">Tủ truyện Fuu</span>
           <button
-            className="icon-button"
+            ref={themeButtonRef}
+            className="icon-button theme-toggle"
             aria-label={state.theme === 'dark' ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'}
-            onClick={() => setState(s => ({ ...s, theme: s.theme === 'dark' ? 'light' : 'dark' }))}
+            onClick={toggleTheme}
           >
             <Icon name={state.theme === 'dark' ? 'sun' : 'moon'} />
           </button>

@@ -241,6 +241,33 @@ footer {
 .icon-button:hover { border-color: var(--accent); background: var(--surface); }
 .icon-button:active { transform: scale(.96); }
 
+.icon-button.theme-toggle svg {
+  transition: transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.icon-button.theme-toggle:hover svg {
+  transform: rotate(18deg) scale(1.08);
+}
+
+.icon-button.theme-toggle:active svg {
+  transform: rotate(-22deg) scale(0.92);
+}
+
+/* Lightswind View Transition theme toggle */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  z-index: 9999;
+}
+
 .storage-warning {
   padding: 10px var(--page-gutter);
   background: #edd487;
@@ -1192,6 +1219,11 @@ footer > span { text-align: right; }
 
 @media (prefers-reduced-motion: reduce) {
   :root { scroll-behavior: auto; }
+  ::view-transition-group(root),
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none !important;
+  }
   *, *::before, *::after {
     animation: none !important;
     scroll-behavior: auto !important;
