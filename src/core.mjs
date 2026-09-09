@@ -40,6 +40,12 @@ export function parseRoute(hash, books = []) {
 
 export const chapterTarget = (current, delta, total) => current + delta >= 1 && current + delta <= total ? current + delta : null;
 
+// ponytail: assumes MangaDex ascending response order; normalize chapter metadata if source ordering changes.
+export function orderChapters(chapters, order = 'oldest') {
+  const source = Array.isArray(chapters) ? chapters : [];
+  return order === 'newest' ? [...source].reverse() : source;
+}
+
 export function validateState(value, books = []) {
   const clean = { saved: [], history: {}, theme: 'dark' };
   if (!value || typeof value !== 'object') return clean;

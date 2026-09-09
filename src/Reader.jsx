@@ -87,9 +87,12 @@ export default function Reader({ book, chapterId, history, onProgress }) {
             ))}
           </select>
         </label>
-        <span className="reader-page">
-          Trang {page + 1} / {totalPages || '—'}
-        </span>
+        <div className="reader-progress">
+          <span className="reader-page">Trang {page + 1} / {totalPages || '—'}</span>
+          {totalPages > 0 && (
+            <progress value={page + 1} max={totalPages} aria-label={`Tiến độ đọc: trang ${page + 1} trên ${totalPages}`} />
+          )}
+        </div>
       </div>
 
       <div className="reader-heading">
@@ -127,7 +130,6 @@ export default function Reader({ book, chapterId, history, onProgress }) {
               ref={el => { pages.current[i] = el; }}
               className="manga-page image-page"
             >
-              <div className="panel-caption"><span>{String(i + 1).padStart(2, '0')}</span>Trang {i + 1}</div>
               <img
                 src={url}
                 alt={`Trang ${i + 1} — ${book.title}`}
@@ -154,17 +156,19 @@ export default function Reader({ book, chapterId, history, onProgress }) {
           <h2>{nextChap ? 'Thêm một chương nữa nhé?' : 'Khép lại chương truyện này.'}</h2>
           <div className="reader-navigation">
             {prevChap ? (
-              <a className="button" href={`#/read/${book.id}/${prevChap.id}`}>← Chương trước</a>
+              <a className="button reader-handoff" href={`#/read/${book.id}/${prevChap.id}`} aria-label={`Chương trước: ${prevChap.title}`}>
+                <span>← {prevChap.title}</span>
+              </a>
             ) : (
               <button className="button" disabled>← Chương trước</button>
             )}
             {nextChap ? (
-              <a className="button primary" href={`#/read/${book.id}/${nextChap.id}`}>
-                Chương tiếp <Icon name="arrow"/>
+              <a className="button primary reader-handoff" href={`#/read/${book.id}/${nextChap.id}`} aria-label={`Chương tiếp: ${nextChap.title}`}>
+                <span>Tiếp: {nextChap.title}</span> <Icon name="arrow"/>
               </a>
             ) : (
-              <a className="button primary" href={`#/book/${book.id}`}>
-                Về trang truyện <Icon name="book"/>
+              <a className="button primary reader-handoff" href={`#/book/${book.id}`} aria-label={`Về trang truyện ${book.title}`}>
+                <span>Về {book.title}</span> <Icon name="book"/>
               </a>
             )}
           </div>

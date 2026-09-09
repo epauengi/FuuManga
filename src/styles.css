@@ -841,19 +841,57 @@ footer {
 
 .synopsis { max-width: 700px; color: var(--muted); font-size: 16px; line-height: 1.85; }
 
-.detail-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 31px 0 46px; }
+.resume-record {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 25px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.resume-record > span {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.detail-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 18px 0 46px; }
 
 .chapter-heading {
   display: flex;
   align-items: end;
   justify-content: space-between;
-  gap: 16px;
+  gap: 20px;
   padding-bottom: 15px;
   border-bottom: 1px solid var(--line-strong);
 }
 
 .chapter-heading h2 { font-size: clamp(32px, 4vw, 46px); }
-.chapter-heading > span { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.chapter-heading > div > span { display: block; margin-top: 5px; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+.chapter-tools {
+  display: grid;
+  min-width: 182px;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.chapter-tools select {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+}
 
 .chapter-list { padding: 0; margin: 0; list-style: none; }
 
@@ -872,7 +910,11 @@ footer {
 
 .chapter-list a:hover,
 .chapter-list a:focus-visible { padding-inline: 10px; border-color: var(--accent); background: var(--surface); }
+.chapter-list li.is-resume a { border-color: var(--accent); box-shadow: inset 3px 0 var(--accent); }
 .chapter-number { color: var(--accent); font-family: 'Barlow Condensed', sans-serif; font-size: 30px; font-variant-numeric: tabular-nums; }
+.chapter-copy { display: grid; min-width: 0; gap: 2px; }
+.chapter-copy > span { overflow-wrap: anywhere; }
+.chapter-copy small { color: var(--muted); font-size: 12px; font-weight: 600; }
 .chapter-list svg { justify-self: end; color: var(--muted); }
 .coming-soon { margin-top: 22px; color: var(--muted); font-size: 15px; }
 
@@ -906,7 +948,28 @@ footer {
   font-size: 14px;
 }
 
+.reader-progress {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+  min-width: 112px;
+}
+
 .reader-page { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.reader-progress progress {
+  width: 112px;
+  height: 3px;
+  overflow: hidden;
+  border: 0;
+  appearance: none;
+  background: var(--line);
+  color: var(--accent);
+}
+
+.reader-progress progress::-webkit-progress-bar { background: var(--line); }
+.reader-progress progress::-webkit-progress-value { background: var(--accent); }
+.reader-progress progress::-moz-progress-bar { background: var(--accent); }
 
 .reader-heading { padding: clamp(45px, 7vw, 82px) 20px clamp(32px, 5vw, 58px); text-align: center; }
 .reader-heading .eyebrow { justify-content: center; }
@@ -916,9 +979,6 @@ footer {
 .reader-pages { width: min(800px, 100%); margin-inline: auto; }
 .manga-page { margin: 0 0 32px; color: var(--paper-ink); background: var(--paper); border: 10px solid var(--paper); scroll-margin-top: 100px; }
 .manga-page.image-page { display: flex; min-height: auto; align-items: center; flex-direction: column; margin-bottom: 0; border: 0; background: #000; }
-.manga-page.image-page .panel-caption { width: 100%; border-bottom: 1px solid var(--line); background: var(--bg); color: var(--muted); }
-.panel-caption { display: flex; align-items: center; gap: 16px; padding: 10px 10px 17px; font-size: 13px; font-weight: 700; }
-.panel-caption > span { color: var(--accent); font-family: 'Barlow Condensed', sans-serif; font-size: 27px; font-variant-numeric: tabular-nums; }
 .manga-img { display: block; width: 100%; max-width: 800px; height: auto; margin: 0 auto; object-fit: contain; }
 .manga-img-fallback { width: 100%; max-width: 800px; min-height: 400px; }
 .manga-page figcaption { max-width: 700px; padding: 28px 40px; margin: auto; font-size: 17px; line-height: 1.9; text-align: center; }
@@ -927,6 +987,8 @@ footer {
 .reader-bottom .eyebrow { justify-content: center; }
 .reader-bottom h2 { margin: 15px 0 27px; font-size: clamp(36px, 5vw, 50px); }
 .reader-navigation { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+.reader-handoff { max-width: min(100%, 390px); }
+.reader-handoff > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Shared feedback */
 .empty { min-height: 340px; padding: clamp(68px, 10vw, 130px) 20px; text-align: center; }
@@ -1084,26 +1146,30 @@ footer > span { text-align: right; }
   .detail-cover { width: min(240px, 64vw); margin-inline: auto; }
   .detail-copy h1 { font-size: clamp(56px, 15vw, 74px); }
   .detail-subtitle, .synopsis { font-size: 15px; }
+  .chapter-heading { align-items: start; flex-direction: column; }
+  .chapter-tools { width: 100%; }
+  .chapter-tools select { width: 100%; }
   .chapter-list a { grid-template-columns: 35px minmax(0, 1fr) 20px; gap: 10px; font-size: 14px; }
   .chapter-list a:hover, .chapter-list a:focus-visible { padding-inline: 6px; }
 
   .reader { width: 100%; }
-  .reader-toolbar { min-height: 0; padding: 10px 16px; gap: 9px; flex-wrap: wrap; }
-  .reader-toolbar > .back-link { min-height: 32px; max-width: calc(100% - 90px); overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+  .reader-toolbar { min-height: 0; padding: calc(10px + env(safe-area-inset-top)) 16px 10px; gap: 9px; flex-wrap: wrap; }
+  .reader-toolbar > .back-link { min-height: 44px; max-width: calc(100% - 132px); overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
   .reader-toolbar label { order: 3; flex: 1 0 100%; }
   .reader-toolbar select { width: 100%; font-size: 13px; }
-  .reader-page { margin-left: auto; font-size: 12px; }
+  .reader-progress { min-width: 123px; margin-left: auto; }
+  .reader-page { font-size: 12px; }
+  .reader-progress progress { width: 123px; }
   .reader-heading { padding: 38px 16px 29px; }
   .reader-heading h1 { font-size: clamp(43px, 12vw, 58px); }
   .reader-heading > p:last-child { font-size: 13px; }
   .manga-page { border-width: 6px; margin-bottom: 18px; scroll-margin-top: 125px; }
-  .panel-caption { gap: 12px; padding: 7px 7px 12px; font-size: 11px; }
-  .panel-caption > span { font-size: 24px; }
   .manga-page figcaption { padding: 20px 14px; font-size: 14px; }
   .reader-bottom { padding-bottom: 66px; }
   .reader-bottom h2 { font-size: 38px; }
   .reader-navigation { gap: 9px; }
-  .reader-navigation .button { padding-inline: 13px; font-size: 13px; }
+  .reader-navigation .button { max-width: 100%; padding-inline: 13px; font-size: 13px; }
+  .reader-handoff { width: min(100%, 360px); }
 
   .empty { min-height: 300px; padding: 72px 14px; }
   .empty p { font-size: 15px; }

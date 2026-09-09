@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { fetchBook, fetchCatalog, fetchChapterPages } from '../src/sources.js';
-import { parseRoute, validateState } from '../src/core.mjs';
+import { orderChapters, parseRoute, validateState } from '../src/core.mjs';
 
 const mangaId = '11111111-1111-1111-1111-111111111111';
 const retryId = '33333333-3333-3333-3333-333333333333';
@@ -83,6 +83,11 @@ try {
       '/api/mangadex-image?url=https%3A%2F%2Fnode.mangadex.network%2Fdata%2Fchapter-hash%2Fpage%25201.jpg'
     ]
   });
+
+  const chapters = [{ id: 'one' }, { id: 'two' }];
+  assert.equal(orderChapters(chapters, 'oldest'), chapters);
+  assert.deepEqual(orderChapters(chapters, 'newest'), [{ id: 'two' }, { id: 'one' }]);
+  assert.deepEqual(chapters, [{ id: 'one' }, { id: 'two' }]);
 
   assert.deepEqual(parseRoute(`#/book/md-${mangaId}`), { page: 'detail', bookId: `md-${mangaId}` });
   assert.deepEqual(parseRoute('#/book/ot-removed-title'), { page: 'notFound' });

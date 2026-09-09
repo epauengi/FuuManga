@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { filterBooks, loadState, parseRoute, saveState } from './core.mjs';
+import { filterBooks, loadState, orderChapters, parseRoute, saveState } from './core.mjs';
 import Reader from './Reader.jsx';
 import { DEFAULT_GENRES, fetchBook, fetchCatalog } from './sources.js';
 
@@ -122,6 +122,7 @@ export default function App() {
   const [route, setRoute] = useState(() => parseRoute(location.hash, []));
   const [query, setQuery] = useState('');
   const [genre, setGenre] = useState('Tất cả');
+  const [chapterOrder, setChapterOrder] = useState('oldest');
   const [notice, setNotice] = useState('');
 
   // Catalog state
@@ -256,6 +257,10 @@ export default function App() {
 
   const recent = Object.entries(state.history).sort((a, b) => b[1].at - a[1].at)[0];
   const featured = catalogItems[0];
+  const activeHistory = activeBook ? state.history[activeBook.id] : null;
+  const resumeChapter = activeBook?.chapters?.find(chapter => String(chapter.id) === String(activeHistory?.chapter));
+  const resumePage = Number.isInteger(activeHistory?.page) && activeHistory.page >= 0 ? activeHistory.page + 1 : null;
+  const displayChapters = orderChapters(activeBook?.chapters, chapterOrder);
 
   const clear = () => {
     setQuery('');
@@ -319,7 +324,14 @@ export default function App() {
                   Bản dịch tiếng Việt từ MangaDex. Đọc trên web, lưu tiến độ và giữ riêng thư viện của bạn trên thiết bị này.
                 </p>
                 <div className="hero-actions">
-                  <a className="button primary" href="#catalog-heading">
+                  <a
+                    className="button primary"
+                    href="#catalog-heading"
+                    onClick={event => {
+                      event.preventDefault();
+                      document.getElementById('catalog-heading')?.scrollIntoView({ block: 'start' });
+                    }}
+                  >
                     <Icon name="search" />Mở mục lục <Icon name="arrow" size={18} />
                   </a>
                 </div>
@@ -485,14 +497,21 @@ export default function App() {
 
                   <p className="synopsis">{activeBook.description}</p>
 
+                  {resumeChapter && resumePage !== null && (
+                    <p className="resume-record">
+                      <span>Tiếp tục</span>
+                      {resumeChapter.title} · Trang {resumePage}
+                    </p>
+                  )}
+
                   <div className="detail-actions">
                     {activeBook.chapters?.length > 0 && (
                       <a
                         className="button primary"
-                        href={`#/read/${activeBook.id}/${state.history[activeBook.id]?.chapter || activeBook.chapters[0].id}`}
+                        href={`#/read/${activeBook.id}/${resumeChapter?.id || activeBook.chapters[0].id}`}
                       >
                         <Icon name="book" />
-                        {state.history[activeBook.id] ? 'Đọc tiếp' : 'Bắt đầu đọc'}
+                        {resumeChapter ? 'Đọc tiếp' : 'Bắt đầu đọc'}
                         <Icon name="arrow" />
                       </a>
                     )}
@@ -507,21 +526,38 @@ export default function App() {
                   </div>
 
                   <div className="chapter-heading">
-                    <h2>{activeBook.chapters?.length ? 'Danh sách chương' : 'Chưa có danh sách chương'}</h2>
-                    <span>{activeBook.chapters?.length || 0} chương</span>
+                    <div>
+                      <h2>{activeBook.chapters?.length ? 'Danh sách chương' : 'Chưa có danh sách chương'}</h2>
+                      <span>{activeBook.chapters?.length || 0} chương</span>
+                    </div>
+                    {activeBook.chapters?.length > 0 && (
+                      <label className="chapter-tools">
+                        <span>Thứ tự chương</span>
+                        <select value={chapterOrder} onChange={event => setChapterOrder(event.target.value)}>
+                          <option value="oldest">Cũ nhất trước</option>
+                          <option value="newest">Mới nhất trước</option>
+                        </select>
+                      </label>
+                    )}
                   </div>
 
                   {activeBook.chapters?.length ? (
                     <ol className="chapter-list">
-                      {activeBook.chapters.map((c, i) => (
-                        <li key={c.id || i}>
-                          <a href={`#/read/${activeBook.id}/${c.id}`}>
-                            <span className="chapter-number">{String(i + 1).padStart(2, '0')}</span>
-                            <span>{c.title}</span>
-                            <Icon name="arrow" />
-                          </a>
-                        </li>
-                      ))}
+                      {displayChapters.map((c, i) => {
+                        const isResume = resumeChapter && String(c.id) === String(resumeChapter.id);
+                        return (
+                          <li key={c.id || i} className={isResume ? 'is-resume' : ''}>
+                            <a href={`#/read/${activeBook.id}/${c.id}`}>
+                              <span className="chapter-number">{String(c.chapterNum).padStart(2, '0')}</span>
+                              <span className="chapter-copy">
+                                <span>{c.title}</span>
+                                {isResume && resumePage !== null && <small>Đang đọc · Trang {resumePage}</small>}
+                              </span>
+                              <Icon name="arrow" />
+                            </a>
+                          </li>
+                        );
+                      })}
                     </ol>
                   ) : (
                     <p className="coming-soon">Hiện chưa thể tải danh sách chương từ máy chủ này.</p>
