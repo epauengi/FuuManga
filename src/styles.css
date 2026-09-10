@@ -937,7 +937,25 @@ footer {
 
 .chapter-list a:hover,
 .chapter-list a:focus-visible { padding-inline: 10px; border-color: var(--accent); background: var(--surface); }
-.chapter-list li.is-resume a { border-color: var(--accent); box-shadow: inset 3px 0 var(--accent); }
+.chapter-list li.is-resume a {
+  padding-inline: 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line-strong));
+  box-shadow: 0 2px 6px var(--shadow);
+}
+.chapter-list li.is-resume a:hover,
+.chapter-list li.is-resume a:focus-visible {
+  border-color: var(--accent);
+  padding-inline: 14px;
+}
+.chapter-list li.is-resume .chapter-copy small {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-weight: 700;
+}
 .chapter-number { color: var(--accent); font-family: 'Barlow Condensed', sans-serif; font-size: 30px; font-variant-numeric: tabular-nums; }
 .chapter-copy { display: grid; min-width: 0; gap: 2px; }
 .chapter-copy > span { overflow-wrap: anywhere; }
