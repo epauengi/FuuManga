@@ -975,6 +975,20 @@ footer {
   font-size: 14px;
 }
 
+.reader-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.reader-fs-btn {
+  color: var(--muted);
+}
+
+.reader-fs-btn:hover {
+  color: var(--accent);
+}
+
 .reader-progress {
   display: grid;
   justify-items: end;
@@ -1002,6 +1016,70 @@ footer {
 .reader-heading .eyebrow { justify-content: center; }
 .reader-heading h1 { max-width: 800px; margin: 18px auto; font-size: clamp(48px, 6vw, 72px); overflow-wrap: anywhere; }
 .reader-heading > p:last-child { color: var(--muted); font-size: 14px; }
+
+.reader-shortcuts-hint {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px 16px;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.reader-shortcuts-hint span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.reader-shortcuts-hint kbd {
+  display: inline-block;
+  min-width: 20px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: 0 1px 0 var(--shadow);
+}
+
+.reader-scroll-top {
+  position: fixed;
+  z-index: 99;
+  bottom: 28px;
+  right: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 4px 16px var(--shadow);
+  cursor: pointer;
+  transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1), background 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.reader-scroll-top:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.reader-scroll-top:active {
+  transform: translateY(0);
+}
 
 .reader-pages { width: min(800px, 100%); margin-inline: auto; }
 .manga-page { margin: 0 0 32px; color: var(--paper-ink); background: var(--paper); border: 10px solid var(--paper); scroll-margin-top: 100px; }
@@ -1181,12 +1259,21 @@ footer > span { text-align: right; }
 
   .reader { width: 100%; }
   .reader-toolbar { min-height: 0; padding: calc(10px + env(safe-area-inset-top)) 16px 10px; gap: 9px; flex-wrap: wrap; }
-  .reader-toolbar > .back-link { min-height: 44px; max-width: calc(100% - 132px); overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+  .reader-toolbar > .back-link { min-height: 44px; max-width: calc(100% - 170px); overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
   .reader-toolbar label { order: 3; flex: 1 0 100%; }
   .reader-toolbar select { width: 100%; font-size: 13px; }
-  .reader-progress { min-width: 123px; margin-left: auto; }
+  .reader-toolbar-right { margin-left: auto; gap: 8px; }
+  .reader-progress { min-width: 105px; }
   .reader-page { font-size: 12px; }
-  .reader-progress progress { width: 123px; }
+  .reader-progress progress { width: 105px; }
+  .reader-scroll-top {
+    bottom: 20px;
+    right: 20px;
+    padding: 10px;
+  }
+  .reader-scroll-top span {
+    display: none;
+  }
   .reader-heading { padding: 38px 16px 29px; }
   .reader-heading h1 { font-size: clamp(43px, 12vw, 58px); }
   .reader-heading > p:last-child { font-size: 13px; }
