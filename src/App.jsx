@@ -50,7 +50,7 @@ export function Artwork({ src, alt, className = '', eager = false }) {
   );
 }
 
-function Card({ book, index }) {
+function Card({ book, index, isSaved, readingProgress }) {
   const number = String(index + 1).padStart(2, '0');
 
   return (
@@ -59,12 +59,28 @@ function Card({ book, index }) {
         <a className="catalog-entry" href={`#/book/${book.id}`} aria-label={`Xem ${book.title}`}>
           <span className="entry-media">
             <Artwork src={book.cover} alt={`Bìa ${book.title}`} />
+            {isSaved && (
+              <span className="entry-saved-ribbon" title="Đã lưu vào thư viện" aria-label="Đã lưu vào thư viện">
+                <Icon name="bookmark" size={12} />
+              </span>
+            )}
           </span>
           <span className="entry-record">
             <span className="entry-topline">
               <span className="entry-index">{number}</span>
-              <span className={`availability ${book.chaptersCount?.includes('Đọc ngay') ? 'ready' : ''}`}>
-                {book.chaptersCount || 'Kho truyện'}
+              <span className="entry-status-group">
+                {readingProgress && (
+                  <span
+                    className="badge-reading"
+                    title={`Đang đọc Chương ${readingProgress.chapter}${readingProgress.page ? ` · Trang ${readingProgress.page + 1}` : ''}`}
+                  >
+                    <span className="badge-reading-pulse" aria-hidden="true" />
+                    <span>C.{readingProgress.chapter}</span>
+                  </span>
+                )}
+                <span className={`availability ${book.chaptersCount?.includes('Đọc ngay') ? 'ready' : ''}`}>
+                  {book.chaptersCount || 'Kho truyện'}
+                </span>
               </span>
             </span>
             <span className="card-genre">{(book.genres || []).join(' · ')}</span>
@@ -410,6 +426,63 @@ export default function App() {
     setGenre('Tất cả');
   };
 
+  const searchInputRef = useRef(null);
+  const [showCatalogScrollTop, setShowCatalogScrollTop] = useState(false);
+
+  // ponytail: Global shortcuts: '/' or 'Ctrl+K' focuses search; 'T' scrolls to top on catalog.
+  useEffect(() => {
+    function onKeyDown(e) {
+      const tag = e.target?.tagName?.toLowerCase();
+      const isInput = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target?.isContentEditable;
+
+      if (e.key === 'Escape') {
+        if (isInput && e.target === searchInputRef.current) {
+          if (query) {
+            setQuery('');
+          } else {
+            searchInputRef.current?.blur();
+          }
+        }
+        return;
+      }
+
+      if (isInput || e.altKey) return;
+
+      const isSlash = e.key === '/' && !e.ctrlKey && !e.metaKey && !e.shiftKey;
+      const isCtrlK = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k';
+
+      if ((isSlash || isCtrlK) && (route.page === 'home' || route.page === 'library')) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+
+      if ((e.key === 't' || e.key === 'T') && !e.ctrlKey && !e.metaKey && (route.page === 'home' || route.page === 'library')) {
+        e.preventDefault();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [route.page, query]);
+
+  useEffect(() => {
+    if (route.page !== 'home' && route.page !== 'library') {
+      setShowCatalogScrollTop(false);
+      return;
+    }
+
+    const handleScroll = () => {
+      const y = window.scrollY || document.documentElement.scrollTop || 0;
+      setShowCatalogScrollTop(y > 450);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [route.page]);
+
   const currentDisplayList = route.page === 'library'
     ? catalogState.items.filter(b => state.saved.includes(b.id))
     : catalogState.items;
@@ -485,7 +558,14 @@ export default function App() {
               <div className={`featured-record ${featured ? 'is-ready' : catalogState.phase === 'loading' ? 'is-loading' : ''}`}>
                 {featured ? (
                   <a href={`#/book/${featured.id}`} className="featured-link">
-                    <span className="featured-media"><Artwork src={featured.cover} alt={`Bìa ${featured.title}`} eager /></span>
+                    <span className="featured-media">
+                      <Artwork src={featured.cover} alt={`Bìa ${featured.title}`} eager />
+                      {state.saved.includes(featured.id) && (
+                        <span className="entry-saved-ribbon" title="Đã lưu vào thư viện" aria-label="Đã lưu vào thư viện">
+                          <Icon name="bookmark" size={13} />
+                        </span>
+                      )}
+                    </span>
                     <span className="featured-copy">
                       <span className="featured-index">Mục 01 <i>Truyện mới</i></span>
                       <strong>{featured.title}</strong>
@@ -541,20 +621,23 @@ export default function App() {
               <label className="search-box">
                 <Icon name="search" />
                 <input
+                  ref={searchInputRef}
                   type="search"
                   name="search"
                   autoComplete="off"
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   placeholder="Tìm truyện theo tên…"
-                  aria-label="Tìm truyện theo tên"
+                  aria-label="Tìm truyện theo tên (Phím tắt: / hoặc Ctrl+K)"
                 />
                 {query && (
-                  <button aria-label="Xóa tìm kiếm" onClick={() => setQuery('')}>
+                  <button aria-label="Xóa tìm kiếm (Esc)" onClick={() => setQuery('')}>
                     <Icon name="close" size={17} />
                   </button>
                 )}
-                <span className="search-hint" aria-hidden="true">⌕</span>
+                <span className="search-hint" aria-hidden="true">
+                  <kbd className="search-kbd" title="Nhấn / hoặc Ctrl+K để tìm nhanh">/</kbd>
+                </span>
               </label>
             </div>
 
@@ -600,7 +683,13 @@ export default function App() {
               <>
                 <div className="book-grid">
                   {currentDisplayList.map((book, index) => (
-                    <Card key={book.id} book={book} index={index} />
+                    <Card
+                      key={book.id}
+                      book={book}
+                      index={index}
+                      isSaved={state.saved.includes(book.id)}
+                      readingProgress={state.history[book.id]}
+                    />
                   ))}
                 </div>
 
@@ -796,6 +885,19 @@ export default function App() {
             <p>Đường dẫn hoặc chương truyện không hợp lệ.</p>
             <a href="#/" className="button primary">Trở về khám phá <Icon name="arrow" /></a>
           </div>
+        )}
+
+        {showCatalogScrollTop && (
+          <button
+            type="button"
+            className="reader-scroll-top catalog-scroll-top"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            aria-label="Cuộn lên đầu trang (Phím T)"
+            title="Cuộn lên đầu trang (Phím T)"
+          >
+            <Icon name="arrowUp" size={16} />
+            <span>Lên đầu (T)</span>
+          </button>
         )}
       </main>
 
