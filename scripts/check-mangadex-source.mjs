@@ -32,7 +32,12 @@ function response(body, status = 200) {
 try {
   globalThis.fetch = async url => {
     calls.push(String(url));
-    if (String(url).startsWith('/api/mangadex/manga?')) return response({ data: [manga()] });
+    if (String(url).startsWith('/api/mangadex/manga?')) return response({
+      data: [manga()],
+      total: 50,
+      limit: 18,
+      offset: 0
+    });
     if (String(url).includes(`/api/mangadex/manga/${mangaId}`)) return response({ data: manga() });
     if (String(url).startsWith('/api/mangadex/chapter?')) return response({
       data: [{ id: chapterId, attributes: { chapter: '1', title: 'Mở đầu' } }]
@@ -44,11 +49,25 @@ try {
     throw new Error(`Unexpected request: ${url}`);
   };
 
-  const catalog = await fetchCatalog({ query: 'mẫu', genre: 'Action' });
-  assert.equal(catalog.length, 1);
-  assert.equal(catalog[0].id, `md-${mangaId}`);
-  assert.match(catalog[0].cover, /^\/api\/mangadex-image\?url=/);
+  const catalog = await fetchCatalog({ query: 'mẫu', genre: 'Action', offset: 0 });
+  assert.equal(catalog.items.length, 1);
+  assert.equal(catalog.total, 50);
+  assert.equal(catalog.offset, 0);
+  assert.equal(catalog.limit, 18);
+  assert.equal(catalog.nextOffset, 1);
+  assert.equal(catalog.reachedLimit, false);
+  assert.equal(catalog.items[0].id, `md-${mangaId}`);
+  assert.match(catalog.items[0].cover, /^\/api\/mangadex-image\?url=/);
   assert.equal(calls.length, 1);
+  assert.match(calls[0], /includedTags%5B%5D=391b0423-d847-456f-aff0-8b0cfc03066b/);
+  assert.match(calls[0], /offset=0/);
+  assert.match(calls[0], /limit=18/);
+
+  // Pagination edge cases
+  const pageLimitExceeded = await fetchCatalog({ offset: 10000 });
+  assert.equal(pageLimitExceeded.nextOffset, null);
+  assert.equal(pageLimitExceeded.reachedLimit, true);
+  assert.equal(pageLimitExceeded.items.length, 0);
 
   const firstBook = await fetchBook(`md-${mangaId}`);
   const secondBook = await fetchBook(`md-${mangaId}`);

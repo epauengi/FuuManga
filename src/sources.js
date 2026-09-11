@@ -10,6 +10,18 @@ export const DEFAULT_GENRES = [
   'Supernatural'
 ];
 
+// ponytail: Bảng 8 tag cố định đối chiếu MangaDex tag UUID; nâng cấp fetch động /manga/tag khi cần danh mục mở rộng.
+export const GENRE_TAG_MAP = {
+  'Action': '391b0423-d847-456f-aff0-8b0cfc03066b',
+  'Comedy': '4d32cc48-9f00-4cca-9b5a-a839f0764984',
+  'Drama': 'b9af3a63-f058-46de-a9a0-e0c13906197a',
+  'Fantasy': 'cdc58593-87dd-415e-bbc0-2ec27bf404cc',
+  'Romance': '423e2eae-a7a2-4a8b-ac03-a8351462d71d',
+  'Slice of Life': 'e5301a23-ebd9-49dd-a0cb-2add944c7fe9',
+  'Sci-Fi': '256c8bd9-4904-4360-bf4f-508a76d67183',
+  'Supernatural': 'eabc5b4c-6aff-42f3-b657-3e90cbd00b75'
+};
+
 const MD_BASE = '/api/mangadex';
 const cache = new Map();
 
@@ -18,8 +30,8 @@ export function mangaDexAssetUrl(url) {
   return `/api/mangadex-image?url=${encodeURIComponent(url)}`;
 }
 
-export async function fetchCatalog({ query = '', genre = 'Tất cả' } = {}) {
-  return getMangaDexCatalog(query, genre);
+export async function fetchCatalog({ query = '', genre = 'Tất cả', offset = 0 } = {}) {
+  return getMangaDexCatalog(query, genre, offset);
 }
 
 export async function fetchBook(id) {
@@ -36,19 +48,49 @@ export async function fetchChapterPages(book, chapterId) {
   return fetchMangaDexChapterPages(chapterId);
 }
 
-async function getMangaDexCatalog(query, genre) {
+async function getMangaDexCatalog(query, genre, offset = 0) {
+  const safeOffset = Math.max(0, Number.isFinite(Number(offset)) ? Math.floor(Number(offset)) : 0);
+  if (safeOffset >= 10000) {
+    return {
+      items: [],
+      total: 10000,
+      offset: safeOffset,
+      limit: 0,
+      nextOffset: null,
+      reachedLimit: true
+    };
+  }
+
+  const limit = Math.min(18, 10000 - safeOffset);
   const params = new URLSearchParams({
-    limit: '18',
+    limit: String(limit),
+    offset: String(safeOffset),
     'availableTranslatedLanguage[]': 'vi',
     'includes[]': 'cover_art',
     'order[latestUploadedChapter]': 'desc'
   });
   if (query) params.set('title', query);
+  const tagId = GENRE_TAG_MAP[genre];
+  if (tagId) params.append('includedTags[]', tagId);
 
   const json = await fetchJson(`${MD_BASE}/manga?${params}`, 'MangaDex');
   const entries = requireArray(json.data, 'MangaDex', 'danh mục truyện');
-  const books = entries.map(mapMangaDexCatalogItem).filter(Boolean);
-  return filterGenre(books, genre);
+  const total = Number.isFinite(Number(json.total)) ? Math.max(0, Math.floor(Number(json.total))) : entries.length;
+  const items = entries.map(mapMangaDexCatalogItem).filter(Boolean);
+  const sourceCount = entries.length;
+  const nextRawOffset = safeOffset + sourceCount;
+  const nextOffset = (nextRawOffset < total && sourceCount > 0 && nextRawOffset < 10000)
+    ? nextRawOffset
+    : null;
+
+  return {
+    items,
+    total,
+    offset: safeOffset,
+    limit,
+    nextOffset,
+    reachedLimit: nextRawOffset >= 10000 && total > 10000
+  };
 }
 
 async function fetchMangaDexBook(mangaId) {
@@ -145,12 +187,6 @@ function mangaTitle(attributes) {
 function localizedText(value) {
   if (!value || typeof value !== 'object') return '';
   return value.vi || value.en || Object.values(value).find(text => typeof text === 'string' && text) || '';
-}
-
-function filterGenre(books, genre) {
-  if (!genre || genre === 'Tất cả') return books;
-  const normalizedGenre = genre.toLowerCase();
-  return books.filter(book => book.genres.some(item => item.toLowerCase().includes(normalizedGenre)));
 }
 
 async function fetchJson(url, provider, { notFound = false } = {}) {

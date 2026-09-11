@@ -19,7 +19,8 @@ export function Icon({ name, size = 20 }) {
     globe: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 0c2.5 3 4 6.5 4 10s-1.5 7-4 10m0-20c-2.5 3-4 6.5-4 10s1.5 7 4 10M2 12h20',
     maximize: 'M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3',
     minimize: 'M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3',
-    arrowUp: 'M12 19V5m-7 7 7-7 7 7'
+    arrowUp: 'M12 19V5m-7 7 7-7 7 7',
+    arrowDown: 'M12 5v14m7-7-7 7-7-7'
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -129,11 +130,20 @@ export default function App() {
   const [chapterOrder, setChapterOrder] = useState('oldest');
   const [notice, setNotice] = useState('');
 
-  // Catalog state
-  const [catalogItems, setCatalogItems] = useState([]);
-  const [loadingCatalog, setLoadingCatalog] = useState(false);
-  const [catalogError, setCatalogError] = useState('');
+  // Catalog state: snapshot chứa danh sách, phân trang và trạng thái
+  const [catalogState, setCatalogState] = useState({
+    items: [],
+    total: 0,
+    nextOffset: null,
+    phase: 'loading', // 'idle' | 'loading' | 'loadingMore' | 'error' | 'errorMore'
+    error: '',
+    reachedLimit: false
+  });
   const [catalogRetry, setCatalogRetry] = useState(0);
+
+  // Generation ref quản lý token hủy request cũ tránh race condition
+  const catalogSessionRef = useRef(0);
+  const catalogLoadingMoreRef = useRef(false);
 
   // Detail & reader state
   const [activeBook, setActiveBook] = useState(null);
@@ -157,30 +167,98 @@ export default function App() {
 
   // Fetch catalog on search or genre change
   useEffect(() => {
-    let active = true;
-    setLoadingCatalog(true);
-    setCatalogError('');
+    const session = ++catalogSessionRef.current;
+    catalogLoadingMoreRef.current = false;
+
+    setCatalogState(prev => ({
+      ...prev,
+      items: [],
+      nextOffset: null,
+      phase: 'loading',
+      error: '',
+      reachedLimit: false
+    }));
 
     const timeout = setTimeout(() => {
-      fetchCatalog({ query, genre })
-        .then(items => {
-          if (!active) return;
-          setCatalogItems(items);
-          setLoadingCatalog(false);
+      fetchCatalog({ query, genre, offset: 0 })
+        .then(res => {
+          if (catalogSessionRef.current !== session) return;
+          setCatalogState({
+            items: res.items,
+            total: res.total,
+            nextOffset: res.nextOffset,
+            phase: 'idle',
+            error: '',
+            reachedLimit: Boolean(res.reachedLimit)
+          });
         })
         .catch(error => {
-          if (!active) return;
-          setCatalogItems([]);
-          setCatalogError(error.message || 'Không thể tải kho truyện. Vui lòng thử lại.');
-          setLoadingCatalog(false);
+          if (catalogSessionRef.current !== session) return;
+          setCatalogState({
+            items: [],
+            total: 0,
+            nextOffset: null,
+            phase: 'error',
+            error: error.message || 'Không thể tải kho truyện. Vui lòng thử lại.',
+            reachedLimit: false
+          });
         });
     }, 250);
 
     return () => {
-      active = false;
       clearTimeout(timeout);
     };
   }, [query, genre, catalogRetry]);
+
+  const loadMore = useCallback(() => {
+    if (
+      catalogLoadingMoreRef.current ||
+      catalogState.nextOffset == null ||
+      catalogState.phase === 'loading' ||
+      catalogState.phase === 'loadingMore'
+    ) {
+      return;
+    }
+
+    catalogLoadingMoreRef.current = true;
+    const session = catalogSessionRef.current;
+    const offsetToLoad = catalogState.nextOffset;
+
+    setCatalogState(prev => ({
+      ...prev,
+      phase: 'loadingMore',
+      error: ''
+    }));
+
+    fetchCatalog({ query, genre, offset: offsetToLoad })
+      .then(res => {
+        if (catalogSessionRef.current !== session) return;
+        catalogLoadingMoreRef.current = false;
+
+        setCatalogState(prev => {
+          const existingIds = new Set(prev.items.map(b => b.id));
+          const fresh = res.items.filter(b => !existingIds.has(b.id));
+          return {
+            items: [...prev.items, ...fresh],
+            total: res.total,
+            nextOffset: res.nextOffset,
+            phase: 'idle',
+            error: '',
+            reachedLimit: Boolean(res.reachedLimit)
+          };
+        });
+      })
+      .catch(error => {
+        if (catalogSessionRef.current !== session) return;
+        catalogLoadingMoreRef.current = false;
+
+        setCatalogState(prev => ({
+          ...prev,
+          phase: 'errorMore',
+          error: error.message || 'Không thể tải thêm truyện. Vui lòng thử lại.'
+        }));
+      });
+  }, [catalogState.nextOffset, catalogState.phase, query, genre]);
 
   // Load full book detail when visiting detail or reader route
   useEffect(() => {
@@ -321,7 +399,7 @@ export default function App() {
   }
 
   const recent = Object.entries(state.history).sort((a, b) => b[1].at - a[1].at)[0];
-  const featured = catalogItems[0];
+  const featured = catalogState.items[0];
   const activeHistory = activeBook ? state.history[activeBook.id] : null;
   const resumeChapter = activeBook?.chapters?.find(chapter => String(chapter.id) === String(activeHistory?.chapter));
   const resumePage = Number.isInteger(activeHistory?.page) && activeHistory.page >= 0 ? activeHistory.page + 1 : null;
@@ -333,8 +411,8 @@ export default function App() {
   };
 
   const currentDisplayList = route.page === 'library'
-    ? catalogItems.filter(b => state.saved.includes(b.id))
-    : catalogItems;
+    ? catalogState.items.filter(b => state.saved.includes(b.id))
+    : catalogState.items;
 
   return (
     <>
@@ -404,7 +482,7 @@ export default function App() {
                 <p className="hero-foot">Một kho truyện. Một nơi để quay lại đúng trang đang đọc.</p>
               </div>
 
-              <div className={`featured-record ${featured ? 'is-ready' : loadingCatalog ? 'is-loading' : ''}`}>
+              <div className={`featured-record ${featured ? 'is-ready' : catalogState.phase === 'loading' ? 'is-loading' : ''}`}>
                 {featured ? (
                   <a href={`#/book/${featured.id}`} className="featured-link">
                     <span className="featured-media"><Artwork src={featured.cover} alt={`Bìa ${featured.title}`} eager /></span>
@@ -427,7 +505,7 @@ export default function App() {
             <div className="index-rail" aria-label="Thông tin FuuManga">
               <span>MANGADEX · BẢN DỊCH TIẾNG VIỆT</span>
               <span>TIẾN ĐỘ LƯU TRÊN THIẾT BỊ</span>
-              <span>{loadingCatalog ? 'ĐANG LẬP MỤC…' : `${catalogItems.length} TỰA TRUYỆN`}</span>
+              <span>{catalogState.phase === 'loading' ? 'ĐANG LẬP MỤC…' : `${catalogState.items.length} TỰA TRUYỆN`}</span>
             </div>
 
             {recent && (
@@ -468,8 +546,8 @@ export default function App() {
                   autoComplete="off"
                   value={query}
                   onChange={e => setQuery(e.target.value)}
-                  placeholder="Tìm truyện theo tên, tác giả…"
-                  aria-label="Tìm truyện"
+                  placeholder="Tìm truyện theo tên…"
+                  aria-label="Tìm truyện theo tên"
                 />
                 {query && (
                   <button aria-label="Xóa tìm kiếm" onClick={() => setQuery('')}>
@@ -487,31 +565,74 @@ export default function App() {
                     key={g}
                     aria-pressed={genre === g}
                     className={genre === g ? 'selected' : ''}
-                    onClick={() => setGenre(g)}
+                    onClick={() => {
+                      if (genre !== g) setGenre(g);
+                    }}
                   >
                     {g}
                   </button>
                 ))}
               </div>
               <span className="result-count" role="status">
-                {loadingCatalog ? 'Đang tìm kiếm…' : `${currentDisplayList.length} câu chuyện`}
+                {route.page === 'library' ? (
+                  `${currentDisplayList.length} câu chuyện trong thư viện`
+                ) : catalogState.phase === 'loading' ? (
+                  'Đang tìm kiếm…'
+                ) : catalogState.total > 0 && catalogState.total < catalogState.items.length ? (
+                  `Đã tải ${catalogState.items.length} truyện · MangaDex hiện báo ${catalogState.total} kết quả`
+                ) : catalogState.total > 0 ? (
+                  `Đang hiển thị ${catalogState.items.length} / ${catalogState.total} truyện`
+                ) : (
+                  `${catalogState.items.length} câu chuyện`
+                )}
               </span>
             </div>
 
-            {loadingCatalog ? (
+            {route.page !== 'library' && catalogState.phase === 'loading' ? (
               <CatalogSkeleton />
-            ) : catalogError ? (
+            ) : route.page !== 'library' && catalogState.phase === 'error' ? (
               <LoadError
                 title="Không thể tải kho truyện"
-                message={catalogError}
+                message={catalogState.error}
                 retry={() => setCatalogRetry(attempt => attempt + 1)}
               />
             ) : currentDisplayList.length ? (
-              <div className="book-grid">
-                {currentDisplayList.map((book, index) => (
-                  <Card key={book.id} book={book} index={index} />
-                ))}
-              </div>
+              <>
+                <div className="book-grid">
+                  {currentDisplayList.map((book, index) => (
+                    <Card key={book.id} book={book} index={index} />
+                  ))}
+                </div>
+
+                {route.page === 'home' && (
+                  <div className="catalog-load-more" role="region" aria-label="Tải thêm truyện">
+                    {catalogState.phase === 'loadingMore' ? (
+                      <button type="button" className="button load-more-btn" disabled>
+                        <span className="spinner-inline" aria-hidden="true" />
+                        <span>Đang tải thêm truyện…</span>
+                      </button>
+                    ) : catalogState.phase === 'errorMore' ? (
+                      <div className="load-more-error">
+                        <p>{catalogState.error}</p>
+                        <button type="button" className="button" onClick={loadMore}>
+                          Thử tải lại
+                        </button>
+                      </div>
+                    ) : catalogState.nextOffset != null ? (
+                      <button type="button" className="button load-more-btn" onClick={loadMore}>
+                        <span>Tải thêm 18 truyện</span>
+                        <Icon name="arrowDown" size={16} />
+                      </button>
+                    ) : catalogState.reachedLimit ? (
+                      <p className="load-more-end">
+                        Đã đạt giới hạn 10.000 kết quả từ nguồn MangaDex. Vui lòng nhập từ khóa cụ thể hơn.
+                      </p>
+                    ) : catalogState.items.length > 0 ? (
+                      <p className="load-more-end">Đã hiển thị toàn bộ kết quả phù hợp.</p>
+                    ) : null}
+                  </div>
+                )}
+              </>
             ) : (
               <Empty library={route.page === 'library' && !state.saved.length} clear={clear} />
             )}
