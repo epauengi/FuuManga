@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { filterBooks, loadState, orderChapters, parseRoute, saveState } from './core.mjs';
+import { filterBooks, filterChapters, loadState, orderChapters, parseRoute, saveState } from './core.mjs';
 import Reader from './Reader.jsx';
 import { DEFAULT_GENRES, fetchBook, fetchCatalog } from './sources.js';
 
@@ -144,6 +144,8 @@ export default function App() {
   const [query, setQuery] = useState('');
   const [genre, setGenre] = useState('Tất cả');
   const [chapterOrder, setChapterOrder] = useState('oldest');
+  const [chapterQuery, setChapterQuery] = useState('');
+  const chapterSearchInputRef = useRef(null);
   const [notice, setNotice] = useState('');
 
   // Catalog state: snapshot chứa danh sách, phân trang và trạng thái
@@ -173,6 +175,7 @@ export default function App() {
   useEffect(() => {
     function change() {
       const parsed = parseRoute(location.hash, []);
+      setChapterQuery('');
       setRoute(parsed);
       window.scrollTo(0, 0);
       requestAnimationFrame(() => main.current?.focus({ preventScroll: true }));
@@ -419,7 +422,7 @@ export default function App() {
   const activeHistory = activeBook ? state.history[activeBook.id] : null;
   const resumeChapter = activeBook?.chapters?.find(chapter => String(chapter.id) === String(activeHistory?.chapter));
   const resumePage = Number.isInteger(activeHistory?.page) && activeHistory.page >= 0 ? activeHistory.page + 1 : null;
-  const displayChapters = orderChapters(activeBook?.chapters, chapterOrder);
+  const displayChapters = orderChapters(filterChapters(activeBook?.chapters, chapterQuery), chapterOrder);
 
   const clear = () => {
     setQuery('');
@@ -804,7 +807,9 @@ export default function App() {
                   <div className="chapter-heading">
                     <div>
                       <h2>{activeBook.chapters?.length ? 'Danh sách chương' : 'Chưa có danh sách chương'}</h2>
-                      <span>{activeBook.chapters?.length || 0} chương</span>
+                      <span role="status" aria-atomic="true">
+                        {displayChapters.length} / {activeBook.chapters?.length || 0} chương đã tải
+                      </span>
                     </div>
                     {activeBook.chapters?.length > 0 && (
                       <label className="chapter-tools">
@@ -817,7 +822,44 @@ export default function App() {
                     )}
                   </div>
 
-                  {activeBook.chapters?.length ? (
+                  {activeBook.chapters?.length > 0 && (
+                    <div className="chapter-search">
+                      <label htmlFor="chapter-search">Tìm trong các chương đã tải</label>
+                      <div className="search-box">
+                        <Icon name="search" />
+                        <input
+                          ref={chapterSearchInputRef}
+                          id="chapter-search"
+                          name="chapter-search"
+                          type="search"
+                          autoComplete="off"
+                          placeholder="Số hoặc tên chương…"
+                          value={chapterQuery}
+                          onChange={event => setChapterQuery(event.target.value)}
+                          onKeyDown={event => {
+                            if (event.key === 'Escape' && !event.nativeEvent.isComposing) {
+                              event.preventDefault();
+                              setChapterQuery('');
+                            }
+                          }}
+                        />
+                        {chapterQuery && (
+                          <button
+                            type="button"
+                            aria-label="Xóa tìm chương"
+                            onClick={() => {
+                              setChapterQuery('');
+                              chapterSearchInputRef.current?.focus();
+                            }}
+                          >
+                            <Icon name="close" size={17} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {displayChapters.length ? (
                     <ol className="chapter-list">
                       {displayChapters.map((c, i) => {
                         const isResume = resumeChapter && String(c.id) === String(resumeChapter.id);
@@ -836,7 +878,11 @@ export default function App() {
                       })}
                     </ol>
                   ) : (
-                    <p className="coming-soon">Hiện chưa thể tải danh sách chương từ máy chủ này.</p>
+                    <p className="coming-soon">
+                      {activeBook.chapters?.length
+                        ? 'Không tìm thấy chương trong các chương đã tải. Hãy thử số hoặc tên khác, hoặc xóa tìm kiếm.'
+                        : 'Hiện chưa thể tải danh sách chương từ máy chủ này.'}
+                    </p>
                   )}
                 </div>
               </div>

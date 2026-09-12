@@ -1082,6 +1082,14 @@ footer {
   font-size: 13px;
 }
 
+.chapter-search { display: grid; gap: 8px; margin-block: 20px 12px; }
+.chapter-search > label { color: var(--muted); font-size: 13px; font-weight: 600; }
+.chapter-search .search-box { width: 100%; margin: 0; }
+.chapter-search input { font-size: 16px; }
+.chapter-search input::placeholder { color: var(--muted); }
+.chapter-search .search-box button { flex: 0 0 44px; color: var(--text); border-radius: var(--radius-sm); }
+.chapter-search .search-box button:hover { background: var(--surface-raised); }
+
 .chapter-list { padding: 0; margin: 0; list-style: none; }
 
 .chapter-list a {

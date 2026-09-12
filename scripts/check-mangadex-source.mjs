@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { fetchBook, fetchCatalog, fetchChapterPages } from '../src/sources.js';
-import { orderChapters, parseRoute, validateState } from '../src/core.mjs';
+import { filterChapters, orderChapters, parseRoute, validateState } from '../src/core.mjs';
 
 const mangaId = '11111111-1111-1111-1111-111111111111';
 const retryId = '33333333-3333-3333-3333-333333333333';
@@ -107,6 +107,35 @@ try {
   assert.equal(orderChapters(chapters, 'oldest'), chapters);
   assert.deepEqual(orderChapters(chapters, 'newest'), [{ id: 'two' }, { id: 'one' }]);
   assert.deepEqual(chapters, [{ id: 'one' }, { id: 'two' }]);
+
+  const searchable = Object.freeze([
+    { id: chapterId, chapterNum: '1', title: 'Chương 1: Mở đầu' },
+    { id: 'alternate', chapterNum: '01.0', title: 'Chương 1: Bản dịch khác' },
+    { id: 'decimal', chapterNum: '1.50', title: 'Chương 1.5: Ngoại truyện' },
+    { id: 'ten', chapterNum: '10', title: 'Chương 10: Mở đầu chuyến đi' },
+    { id: 'hundred', chapterNum: '100', title: 'Chương 100' }
+  ].map(Object.freeze));
+  for (const query of ['', '  ', null]) assert.equal(filterChapters(searchable, query), searchable);
+  for (const query of ['1', '01', '1.0', ' ChƯơNG 1 ']) {
+    assert.deepEqual(filterChapters(searchable, query), searchable.slice(0, 2));
+  }
+  assert.deepEqual(filterChapters(searchable, '1.5'), [searchable[2]]);
+  assert.deepEqual(filterChapters(searchable, '  MO DAU  '), [searchable[0], searchable[3]]);
+  assert.deepEqual(filterChapters(searchable, 'CHUYẾN ĐI'), [searchable[3]]);
+  assert.deepEqual(filterChapters(searchable, chapterId), []);
+  assert.deepEqual(filterChapters(searchable, 'không tồn tại'), []);
+  assert.deepEqual(filterChapters(undefined, '1'), []);
+  assert.deepEqual(filterChapters({}, ''), []);
+  for (const query of ['1', '0', 'undefined', 'null', 'Infinity']) {
+    assert.deepEqual(filterChapters([null, {}, { chapterNum: '' }, { chapterNum: 'Infinity' }], query), []);
+  }
+  assert.deepEqual(filterChapters([{ chapterNum: '1e0', title: 'Chương 1' }], '1'), []);
+  assert.deepEqual(filterChapters([{ chapterNum: '9'.repeat(400) }], '9'.repeat(400)), []);
+  const matches = filterChapters(searchable, 'mo dau');
+  assert.equal(orderChapters(matches, 'oldest'), matches);
+  assert.deepEqual(orderChapters(matches, 'newest'), [searchable[3], searchable[0]]);
+  assert.deepEqual(matches, [searchable[0], searchable[3]]);
+  assert.equal(searchable[0].id, chapterId);
 
   assert.deepEqual(parseRoute(`#/book/md-${mangaId}`), { page: 'detail', bookId: `md-${mangaId}` });
   assert.deepEqual(parseRoute('#/book/ot-removed-title'), { page: 'notFound' });

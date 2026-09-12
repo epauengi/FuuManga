@@ -46,6 +46,20 @@ export function orderChapters(chapters, order = 'oldest') {
   return order === 'newest' ? [...source].reverse() : source;
 }
 
+// ponytail: searches loaded chapters only; fetch more chapters before extending the search scope.
+export function filterChapters(chapters, query) {
+  const source = Array.isArray(chapters) ? chapters : [];
+  const term = normalize(query ?? '');
+  if (!term) return source;
+  const numeric = term.match(/^(?:chuong\s+)?(\d+(?:\.\d+)?)$/);
+  return source.filter(chapter => {
+    if (!numeric) return normalize(chapter?.title ?? '').includes(term);
+    const number = String(chapter?.chapterNum ?? '').trim();
+    return /^\d+(?:\.\d+)?$/.test(number) && Number.isFinite(Number(number)) &&
+      Number(number) === Number(numeric[1]);
+  });
+}
+
 export function validateState(value, books = []) {
   const clean = { saved: [], history: {}, theme: 'dark' };
   if (!value || typeof value !== 'object') return clean;
