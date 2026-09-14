@@ -1152,6 +1152,40 @@ footer {
   background: var(--bg);
 }
 
+.reader-chapter-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.reader-nav-btn {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease;
+}
+
+.reader-nav-btn:hover:not(.is-disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.reader-nav-btn.is-disabled {
+  opacity: .32;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.reader-chapter-select-wrap {
+  display: block;
+  min-width: 0;
+}
+
 .reader-toolbar select {
   max-width: 100%;
   min-height: 44px;
@@ -1185,6 +1219,7 @@ footer {
 }
 
 .reader-page { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.reader-percent { color: var(--accent); font-size: 11px; font-weight: 700; }
 
 .reader-progress progress {
   width: 112px;
@@ -1447,7 +1482,8 @@ footer > span { text-align: right; }
   .reader { width: 100%; }
   .reader-toolbar { min-height: 0; padding: calc(10px + env(safe-area-inset-top)) 16px 10px; gap: 9px; flex-wrap: wrap; }
   .reader-toolbar > .back-link { min-height: 44px; max-width: calc(100% - 170px); overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-  .reader-toolbar label { order: 3; flex: 1 0 100%; }
+  .reader-chapter-nav { order: 3; flex: 1 0 100%; width: 100%; gap: 6px; }
+  .reader-chapter-select-wrap { flex: 1 1 auto; min-width: 0; }
   .reader-toolbar select { width: 100%; font-size: 13px; }
   .reader-toolbar-right { margin-left: auto; gap: 8px; }
   .reader-progress { min-width: 105px; }

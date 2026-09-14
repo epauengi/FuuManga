@@ -13,6 +13,9 @@ export function Icon({ name, size = 20 }) {
     moon: 'M20 15A9 9 0 0 1 9 3a9 9 0 1 0 11 12Z',
     book: 'M12 5v16M3 3c4 0 6 0 9 2 3-2 5-2 9-2v16c-4 0-6 0-9 2-3-2-5-2-9-2V3Z',
     chevron: 'm9 5 7 7-7 7',
+    chevronLeft: 'm15 18-6-6 6-6',
+    chevronRight: 'm9 18 6-6-6-6',
+    share: 'M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8m-4-6-4-4-4 4m4-4v13',
     close: 'm6 6 12 12M6 18 18 6',
     check: 'm5 12 4 4L19 6',
     sparkles: 'm12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z',
@@ -801,6 +804,37 @@ export default function App() {
                     >
                       <Icon name={state.saved.includes(activeBook.id) ? 'check' : 'bookmark'} />
                       {state.saved.includes(activeBook.id) ? 'Đã lưu truyện' : 'Lưu vào thư viện'}
+                    </button>
+                    {/* ponytail: uses clipboard text copy with fallback; upgrade to Web Share API (navigator.share) if native mobile share sheet is needed. */}
+                    <button
+                      type="button"
+                      className="button"
+                      onClick={() => {
+                        const url = window.location.href;
+                        const fallback = () => {
+                          const ta = document.createElement('textarea');
+                          ta.value = url;
+                          ta.style.position = 'fixed';
+                          ta.style.left = '-9999px';
+                          document.body.appendChild(ta);
+                          ta.select();
+                          const ok = document.execCommand('copy');
+                          document.body.removeChild(ta);
+                          if (!ok) throw new Error('copy failed');
+                        };
+                        const promise = navigator.clipboard?.writeText
+                          ? navigator.clipboard.writeText(url).catch(fallback)
+                          : Promise.resolve().then(fallback);
+
+                        promise
+                          .then(() => setNotice('Đã sao chép liên kết truyện'))
+                          .catch(() => setNotice('Không thể sao chép liên kết'));
+                      }}
+                      aria-label="Chia sẻ liên kết truyện này"
+                      title="Sao chép liên kết truyện vào bộ nhớ tạm"
+                    >
+                      <Icon name="share" size={17} />
+                      <span>Chia sẻ</span>
                     </button>
                   </div>
 

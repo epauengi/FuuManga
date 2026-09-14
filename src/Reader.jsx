@@ -141,6 +141,7 @@ export default function Reader({ book, chapterId, history, onProgress }) {
   }, [loading, content, book.id, chapterId]);
 
   const totalPages = content?.images?.length || 0;
+  const percent = totalPages > 0 ? Math.round(((page + 1) / totalPages) * 100) : 0;
 
   return (
     <section className="reader">
@@ -148,19 +149,45 @@ export default function Reader({ book, chapterId, history, onProgress }) {
         <a href={`#/book/${book.id}`} className="back-link">
           ← <span>{book.title}</span>
         </a>
-        <label>
-          <span className="sr-only">Chọn chương</span>
-          <select
-            value={chapterId}
-            onChange={e => { location.hash = `/read/${book.id}/${e.target.value}`; }}
+        {/* ponytail: uses hash links for immediate chapter stepping; upgrade to prefetching next chapter pages if instant transitions desired. */}
+        <div className="reader-chapter-nav" role="navigation" aria-label="Điều hướng chương">
+          <a
+            href={prevChap ? `#/read/${book.id}/${prevChap.id}` : undefined}
+            className={`icon-button reader-nav-btn ${!prevChap ? 'is-disabled' : ''}`}
+            aria-disabled={!prevChap ? 'true' : undefined}
+            tabIndex={!prevChap ? -1 : undefined}
+            aria-label={prevChap ? `Chương trước: ${prevChap.title}` : 'Không có chương trước'}
+            title={prevChap ? `Chương trước: ${prevChap.title}` : 'Không có chương trước'}
+            onClick={e => { if (!prevChap) e.preventDefault(); }}
           >
-            {chapters.map((c, i) => (
-              <option key={c.id || i} value={c.id}>
-                {c.title}
-              </option>
-            ))}
-          </select>
-        </label>
+            <Icon name="chevronLeft" size={16} />
+          </a>
+          <label className="reader-chapter-select-wrap">
+            <span className="sr-only">Chọn chương</span>
+            <select
+              value={chapterId}
+              onChange={e => { location.hash = `/read/${book.id}/${e.target.value}`; }}
+              aria-label="Danh sách chương"
+            >
+              {chapters.map((c, i) => (
+                <option key={c.id || i} value={c.id}>
+                  {c.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <a
+            href={nextChap ? `#/read/${book.id}/${nextChap.id}` : undefined}
+            className={`icon-button reader-nav-btn ${!nextChap ? 'is-disabled' : ''}`}
+            aria-disabled={!nextChap ? 'true' : undefined}
+            tabIndex={!nextChap ? -1 : undefined}
+            aria-label={nextChap ? `Chương tiếp theo: ${nextChap.title}` : 'Không có chương tiếp theo'}
+            title={nextChap ? `Chương tiếp theo: ${nextChap.title}` : 'Không có chương tiếp theo'}
+            onClick={e => { if (!nextChap) e.preventDefault(); }}
+          >
+            <Icon name="chevronRight" size={16} />
+          </a>
+        </div>
         <div className="reader-toolbar-right">
           <button
             type="button"
@@ -172,7 +199,10 @@ export default function Reader({ book, chapterId, history, onProgress }) {
             <Icon name={isFullscreen ? 'minimize' : 'maximize'} size={18} />
           </button>
           <div className="reader-progress">
-            <span className="reader-page">Trang {page + 1} / {totalPages || '—'}</span>
+            <span className="reader-page">
+              Trang {page + 1} / {totalPages || '—'}
+              {totalPages > 0 && <small className="reader-percent"> · {percent}%</small>}
+            </span>
             {totalPages > 0 && (
               <progress value={page + 1} max={totalPages} aria-label={`Tiến độ đọc: trang ${page + 1} trên ${totalPages}`} />
             )}
