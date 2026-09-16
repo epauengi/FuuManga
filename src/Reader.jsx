@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from './App.jsx';
+import { findChapterIndex } from './core.mjs';
 import { fetchChapterPages } from './sources.js';
 
 export default function Reader({ book, chapterId, history, onProgress }) {
@@ -11,9 +12,10 @@ export default function Reader({ book, chapterId, history, onProgress }) {
 
   const bookKey = book.slug || book.id;
   const chapters = book.chapters || [];
-  const currentIndex = chapters.findIndex(c => String(c.id) === String(chapterId) || String(c.chapterNum) === String(chapterId));
+  const currentIndex = findChapterIndex(chapters, chapterId);
   const currentChapter = currentIndex >= 0 ? chapters[currentIndex] : chapters[0] || { id: chapterId, title: `Chương ${chapterId}` };
   const targetChapterId = currentChapter?.id || chapterId;
+  const chapKey = c => c?.slug || (c?.chapterNum ? `chuong-${c.chapterNum}` : c?.id);
 
   const [page, setPage] = useState(history?.chapter === targetChapterId ? (history.page || 0) : 0);
   const pages = useRef([]);
@@ -68,12 +70,12 @@ export default function Reader({ book, chapterId, history, onProgress }) {
       if (e.key === 'ArrowLeft' || e.key === '[') {
         if (prevChap) {
           e.preventDefault();
-          location.hash = `#/read/${bookKey}/${prevChap.id}`;
+          location.hash = `#/read/${bookKey}/${chapKey(prevChap)}`;
         }
       } else if (e.key === 'ArrowRight' || e.key === ']') {
         if (nextChap) {
           e.preventDefault();
-          location.hash = `#/read/${bookKey}/${nextChap.id}`;
+          location.hash = `#/read/${bookKey}/${chapKey(nextChap)}`;
         }
       } else if (e.key === 'Escape') {
         if (document.fullscreenElement) {
@@ -154,7 +156,7 @@ export default function Reader({ book, chapterId, history, onProgress }) {
         {/* ponytail: uses hash links for immediate chapter stepping; upgrade to prefetching next chapter pages if instant transitions desired. */}
         <div className="reader-chapter-nav" role="navigation" aria-label="Điều hướng chương">
           <a
-            href={prevChap ? `#/read/${bookKey}/${prevChap.id}` : undefined}
+            href={prevChap ? `#/read/${bookKey}/${chapKey(prevChap)}` : undefined}
             className={`icon-button reader-nav-btn ${!prevChap ? 'is-disabled' : ''}`}
             aria-disabled={!prevChap ? 'true' : undefined}
             tabIndex={!prevChap ? -1 : undefined}
@@ -167,8 +169,11 @@ export default function Reader({ book, chapterId, history, onProgress }) {
           <label className="reader-chapter-select-wrap">
             <span className="sr-only">Chọn chương</span>
             <select
-              value={chapterId}
-              onChange={e => { location.hash = `#/read/${bookKey}/${e.target.value}`; }}
+              value={currentChapter?.id || targetChapterId}
+              onChange={e => {
+                const selected = chapters.find(c => String(c.id) === e.target.value);
+                location.hash = `#/read/${bookKey}/${chapKey(selected) || e.target.value}`;
+              }}
               aria-label="Danh sách chương"
             >
               {chapters.map((c, i) => (
@@ -179,7 +184,7 @@ export default function Reader({ book, chapterId, history, onProgress }) {
             </select>
           </label>
           <a
-            href={nextChap ? `#/read/${bookKey}/${nextChap.id}` : undefined}
+            href={nextChap ? `#/read/${bookKey}/${chapKey(nextChap)}` : undefined}
             className={`icon-button reader-nav-btn ${!nextChap ? 'is-disabled' : ''}`}
             aria-disabled={!nextChap ? 'true' : undefined}
             tabIndex={!nextChap ? -1 : undefined}
@@ -279,14 +284,14 @@ export default function Reader({ book, chapterId, history, onProgress }) {
           <h2>{nextChap ? 'Thêm một chương nữa nhé?' : 'Khép lại chương truyện này.'}</h2>
           <div className="reader-navigation">
             {prevChap ? (
-              <a className="button reader-handoff" href={`#/read/${bookKey}/${prevChap.id}`} aria-label={`Chương trước: ${prevChap.title}`}>
+              <a className="button reader-handoff" href={`#/read/${bookKey}/${chapKey(prevChap)}`} aria-label={`Chương trước: ${prevChap.title}`}>
                 <span>← {prevChap.title}</span>
               </a>
             ) : (
               <button className="button" disabled>← Chương trước</button>
             )}
             {nextChap ? (
-              <a className="button primary reader-handoff" href={`#/read/${bookKey}/${nextChap.id}`} aria-label={`Chương tiếp: ${nextChap.title}`}>
+              <a className="button primary reader-handoff" href={`#/read/${bookKey}/${chapKey(nextChap)}`} aria-label={`Chương tiếp: ${nextChap.title}`}>
                 <span>Tiếp: {nextChap.title}</span> <Icon name="arrow"/>
               </a>
             ) : (

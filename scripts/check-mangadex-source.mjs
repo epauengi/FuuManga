@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { fetchBook, fetchCatalog, fetchChapterPages, formatChapterDate, PAGE_SIZE } from '../src/sources.js';
-import { filterChapters, orderChapters, parseRoute, slugify, validateState } from '../src/core.mjs';
+import { chapterSlug, filterChapters, findChapterIndex, orderChapters, parseRoute, slugify, validateState } from '../src/core.mjs';
 
 const mangaId = '11111111-1111-1111-1111-111111111111';
 const retryId = '33333333-3333-3333-3333-333333333333';
@@ -74,6 +74,7 @@ try {
   const secondBook = await fetchBook(`md-${mangaId}`);
   assert.equal(firstBook, secondBook);
   assert.equal(firstBook.chapters[0].id, chapterId);
+  assert.equal(firstBook.chapters[0].slug, 'chuong-1');
   assert.equal(firstBook.chapters[0].rawDate, '2023-05-15T12:00:00.000Z');
   assert.match(firstBook.chapters[0].date, /^\d{2}\/\d{2}\/\d{4}$/);
   assert.equal(formatChapterDate(''), '');
@@ -165,10 +166,34 @@ try {
   assert.deepEqual(parseRoute('#/book/ot-removed-title'), { page: 'notFound' });
   assert.deepEqual(parseRoute('#/read/ot-removed-title/1'), { page: 'notFound' });
 
-  const sampleBook = { id: `md-${mangaId}`, slug: 'truyen-mau', chapters: [{ id: chapterId, chapterNum: '1' }] };
+  const sampleBook = {
+    id: `md-${mangaId}`,
+    slug: 'truyen-mau',
+    chapters: [
+      { id: chapterId, chapterNum: '1', slug: 'chuong-1' },
+      { id: 'c-2', chapterNum: '1.5', slug: 'chuong-1.5' }
+    ]
+  };
   assert.deepEqual(parseRoute('#/book/truyen-mau', [sampleBook]), { page: 'detail', book: sampleBook, bookId: `md-${mangaId}` });
   assert.deepEqual(parseRoute('#/read/truyen-mau/1', [sampleBook]), { page: 'reader', book: sampleBook, chapter: 1, bookId: `md-${mangaId}`, chapterId: '1' });
   assert.deepEqual(parseRoute(`#/read/truyen-mau/${chapterId}`, [sampleBook]), { page: 'reader', book: sampleBook, bookId: `md-${mangaId}`, chapterId, chapter: 1 });
+  assert.deepEqual(parseRoute('#/read/truyen-mau/chuong-1', [sampleBook]), { page: 'reader', book: sampleBook, bookId: `md-${mangaId}`, chapterId: 'chuong-1', chapter: 1 });
+  assert.deepEqual(parseRoute('#/read/truyen-mau/chuong-1.5', [sampleBook]), { page: 'reader', book: sampleBook, bookId: `md-${mangaId}`, chapterId: 'chuong-1.5', chapter: 1.5 });
+
+  assert.equal(chapterSlug('1', 0), 'chuong-1');
+  assert.equal(chapterSlug('1.5', 1), 'chuong-1.5');
+  assert.equal(chapterSlug('21', 20), 'chuong-21');
+  assert.equal(chapterSlug(null, 2), 'chuong-3');
+  assert.equal(chapterSlug('', 0), 'chuong-1');
+
+  assert.equal(findChapterIndex(sampleBook.chapters, chapterId), 0);
+  assert.equal(findChapterIndex(sampleBook.chapters, 'chuong-1'), 0);
+  assert.equal(findChapterIndex(sampleBook.chapters, '1'), 0);
+  assert.equal(findChapterIndex(sampleBook.chapters, 'chuong-01'), 0);
+  assert.equal(findChapterIndex(sampleBook.chapters, 'chuong-1.5'), 1);
+  assert.equal(findChapterIndex(sampleBook.chapters, '1.5'), 1);
+  assert.equal(findChapterIndex(sampleBook.chapters, 'c-2'), 1);
+  assert.equal(findChapterIndex(sampleBook.chapters, 'khong-ton-tai'), -1);
 
   assert.equal(firstBook.slug, 'truyen-mau');
   assert.equal(await fetchBook('truyen-mau'), firstBook);

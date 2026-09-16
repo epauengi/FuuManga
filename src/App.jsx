@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { filterBooks, filterChapters, loadState, orderChapters, parseRoute, saveState } from './core.mjs';
+import { filterBooks, filterChapters, findChapterIndex, loadState, orderChapters, parseRoute, saveState } from './core.mjs';
 import Reader from './Reader.jsx';
 import { DEFAULT_GENRES, PAGE_SIZE, fetchBook, fetchCatalog } from './sources.js';
 
@@ -350,12 +350,19 @@ export default function App() {
           if (!active) return;
           setActiveBook(book);
           setLoadingBook(false);
-          // ponytail: Rewrite legacy md- UUID hash to canonical pure slug without adding browser history entry.
+          // ponytail: Rewrite legacy md- UUID hash or raw chapter UUID to canonical pure slugs without adding browser history entry.
           if (book?.slug && typeof window !== 'undefined') {
             if (route.page === 'detail' && window.location.hash.startsWith('#/book/md-')) {
               window.history.replaceState(null, '', `#/book/${book.slug}`);
-            } else if (route.page === 'reader' && window.location.hash.startsWith('#/read/md-') && route.chapterId) {
-              window.history.replaceState(null, '', `#/read/${book.slug}/${route.chapterId}`);
+            } else if (route.page === 'reader' && route.chapterId && book.chapters?.length) {
+              const chapIdx = findChapterIndex(book.chapters, route.chapterId);
+              const chap = chapIdx >= 0 ? book.chapters[chapIdx] : book.chapters[0];
+              const chapKey = chap?.slug || (chap?.chapterNum ? `chuong-${chap.chapterNum}` : chap?.id);
+              const currentHash = window.location.hash;
+              const canonicalHash = `#/read/${book.slug}/${chapKey}`;
+              if (chapKey && currentHash !== canonicalHash) {
+                window.history.replaceState(null, '', canonicalHash);
+              }
             }
           }
         })
@@ -486,7 +493,13 @@ export default function App() {
   const recentBook = recent ? catalogState.items.find(b => b.id === recent[0]) : null;
   const featured = catalogState.items[0];
   const activeHistory = activeBook ? state.history[activeBook.id] : null;
-  const resumeChapter = activeBook?.chapters?.find(chapter => String(chapter.id) === String(activeHistory?.chapter));
+  const resumeChapter = activeBook?.chapters?.find(chapter =>
+    String(chapter.id) === String(activeHistory?.chapter) ||
+    String(chapter.slug) === String(activeHistory?.chapter) ||
+    String(chapter.chapterNum) === String(activeHistory?.chapter)
+  );
+  const resumeTarget = resumeChapter || activeBook?.chapters?.[0];
+  const resumeChapKey = resumeTarget?.slug || (resumeTarget?.chapterNum ? `chuong-${resumeTarget.chapterNum}` : resumeTarget?.id);
   const resumePage = Number.isInteger(activeHistory?.page) && activeHistory.page >= 0 ? activeHistory.page + 1 : null;
   const displayChapters = orderChapters(filterChapters(activeBook?.chapters, chapterQuery), chapterOrder);
 
@@ -833,7 +846,7 @@ export default function App() {
                     {activeBook.chapters?.length > 0 && (
                       <a
                         className="button primary"
-                        href={`#/read/${activeBook.slug || activeBook.id}/${resumeChapter?.id || activeBook.chapters[0].id}`}
+                        href={`#/read/${activeBook.slug || activeBook.id}/${resumeChapKey}`}
                       >
                         <Icon name="book" />
                         {resumeChapter ? 'Đọc tiếp' : 'Bắt đầu đọc'}
@@ -942,7 +955,7 @@ export default function App() {
                         const isResume = resumeChapter && String(c.id) === String(resumeChapter.id);
                         return (
                           <li key={c.id || i} className={isResume ? 'is-resume' : ''}>
-                            <a href={`#/read/${activeBook.slug || activeBook.id}/${c.id}`}>
+                            <a href={`#/read/${activeBook.slug || activeBook.id}/${c.slug || (c.chapterNum ? `chuong-${c.chapterNum}` : c.id)}`}>
                               <span className="chapter-number">{String(c.chapterNum).padStart(2, '0')}</span>
                               <span className="chapter-copy">
                                 <span>{c.title}</span>

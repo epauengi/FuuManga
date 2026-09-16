@@ -1,4 +1,4 @@
-import { slugify } from './core.mjs';
+import { chapterSlug, slugify } from './core.mjs';
 
 export const DEFAULT_GENRES = [
   'Tất cả',
@@ -161,7 +161,20 @@ async function fetchMangaDexBook(mangaId) {
     'MangaDex'
   );
   const chapterData = requireArray(chaptersJson.data, 'MangaDex', 'danh sách chương');
-  const chapters = chapterData.map((chapter, index) => mapMangaDexChapter(chapter, index)).filter(Boolean);
+  const seenSlugs = new Map();
+  const chapters = chapterData.map((chapter, index) => {
+    const mapped = mapMangaDexChapter(chapter, index);
+    if (!mapped) return null;
+    let s = mapped.slug;
+    if (seenSlugs.has(s)) {
+      const count = seenSlugs.get(s) + 1;
+      seenSlugs.set(s, count);
+      mapped.slug = `${s}-${count}`;
+    } else {
+      seenSlugs.set(s, 1);
+    }
+    return mapped;
+  }).filter(Boolean);
 
   const id = `md-${manga.id}`;
   const title = mangaTitle(manga.attributes);
@@ -242,6 +255,7 @@ function mapMangaDexChapter(chapter, index) {
   return {
     id: chapter.id,
     chapterNum: number,
+    slug: chapterSlug(number, index),
     title: name ? `Chương ${number}: ${name}` : `Chương ${number}`,
     rawDate,
     date: formatChapterDate(rawDate)

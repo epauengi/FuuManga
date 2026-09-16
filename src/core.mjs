@@ -2,6 +2,52 @@ export const KEY = 'fuumanga.v1';
 export const normalize = value => String(value).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().trim();
 export const slugify = value => normalize(value ?? '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
+export function chapterSlug(number, index) {
+  if (number !== undefined && number !== null && String(number).trim() !== '') {
+    const cleanNum = String(number).trim().toLowerCase().replace(/[^a-z0-9.]+/g, '-').replace(/^-+|-+$/g, '');
+    if (cleanNum) return `chuong-${cleanNum}`;
+  }
+  return `chuong-${(Number.isInteger(index) ? index : 0) + 1}`;
+}
+
+export function findChapterIndex(chapters, chapterParam) {
+  if (!Array.isArray(chapters) || !chapters.length || chapterParam === undefined || chapterParam === null) return -1;
+  const param = String(chapterParam).trim().toLowerCase();
+  if (!param) return -1;
+
+  let idx = chapters.findIndex(c => String(c?.id).toLowerCase() === param || String(c?.slug).toLowerCase() === param);
+  if (idx >= 0) return idx;
+
+  idx = chapters.findIndex(c => String(c?.chapterNum ?? '').trim().toLowerCase() === param);
+  if (idx >= 0) return idx;
+
+  const stripped = param.replace(/^(?:chuong|c)[-_]?/i, '');
+  if (stripped) {
+    idx = chapters.findIndex(c => {
+      const num = String(c?.chapterNum ?? '').trim().toLowerCase();
+      const slugNum = String(c?.slug ?? '').replace(/^(?:chuong|c)[-_]?/i, '').trim().toLowerCase();
+      return num === stripped || slugNum === stripped;
+    });
+    if (idx >= 0) return idx;
+
+    const strippedNum = Number(stripped);
+    if (Number.isFinite(strippedNum)) {
+      idx = chapters.findIndex(c => {
+        const n = Number(c?.chapterNum);
+        return Number.isFinite(n) && n === strippedNum;
+      });
+      if (idx >= 0) return idx;
+    }
+  }
+
+  const numVal = Number(stripped || param);
+  if (Number.isInteger(numVal) && numVal >= 1 && numVal <= chapters.length) {
+    return numVal - 1;
+  }
+
+  return -1;
+}
+
 export function filterBooks(books, query, genre) {
   return books.filter(b => normalize(b.title).includes(normalize(query)) && (genre === 'Tất cả' || (b.genres && b.genres.includes(genre))));
 }
@@ -38,10 +84,23 @@ export function parseRoute(hash, books = []) {
         if (chapterObj) {
           return { page: 'reader', book, bookId: book.id, chapterId: chapterParam, chapter: Number(chapterObj.chapterNum) || 1 };
         }
+        const chapIdx = findChapterIndex(book.chapters, chapterParam);
+        if (chapIdx >= 0) {
+          const chap = book.chapters[chapIdx];
+          return {
+            page: 'reader',
+            book,
+            bookId: book.id,
+            chapterId: chapterParam,
+            chapter: Number(chap?.chapterNum) || (chapIdx + 1)
+          };
+        }
         return { page: 'notFound' };
       }
       if (isLegacyMd || isSlug) {
-        return { page: 'reader', bookId: id, chapterId: chapterParam, chapter: Number(chapterParam) || 1 };
+        const parsedNum = Number(String(chapterParam).replace(/^(?:chuong|c)[-_]?/i, ''));
+        const fallbackNum = Number.isFinite(parsedNum) && parsedNum > 0 ? parsedNum : 1;
+        return { page: 'reader', bookId: id, chapterId: chapterParam, chapter: fallbackNum };
       }
     }
   } catch {}
