@@ -9,11 +9,13 @@ export default function Reader({ book, chapterId, history, onProgress }) {
   const [isFullscreen, setIsFullscreen] = useState(Boolean(typeof document !== 'undefined' && document.fullscreenElement));
   const [showScrollTop, setShowScrollTop] = useState(false);
 
+  const bookKey = book.slug || book.id;
   const chapters = book.chapters || [];
-  const currentIndex = chapters.findIndex(c => String(c.id) === String(chapterId));
+  const currentIndex = chapters.findIndex(c => String(c.id) === String(chapterId) || String(c.chapterNum) === String(chapterId));
   const currentChapter = currentIndex >= 0 ? chapters[currentIndex] : chapters[0] || { id: chapterId, title: `Chương ${chapterId}` };
+  const targetChapterId = currentChapter?.id || chapterId;
 
-  const [page, setPage] = useState(history?.chapter === chapterId ? (history.page || 0) : 0);
+  const [page, setPage] = useState(history?.chapter === targetChapterId ? (history.page || 0) : 0);
   const pages = useRef([]);
   const progressCallback = useRef(onProgress);
   progressCallback.current = onProgress;
@@ -66,19 +68,19 @@ export default function Reader({ book, chapterId, history, onProgress }) {
       if (e.key === 'ArrowLeft' || e.key === '[') {
         if (prevChap) {
           e.preventDefault();
-          location.hash = `#/read/${book.id}/${prevChap.id}`;
+          location.hash = `#/read/${bookKey}/${prevChap.id}`;
         }
       } else if (e.key === 'ArrowRight' || e.key === ']') {
         if (nextChap) {
           e.preventDefault();
-          location.hash = `#/read/${book.id}/${nextChap.id}`;
+          location.hash = `#/read/${bookKey}/${nextChap.id}`;
         }
       } else if (e.key === 'Escape') {
         if (document.fullscreenElement) {
           document.exitFullscreen?.().catch(() => {});
         } else {
           e.preventDefault();
-          location.hash = `#/book/${book.id}`;
+          location.hash = `#/book/${bookKey}`;
         }
       } else if (e.key === 'f' || e.key === 'F') {
         e.preventDefault();
@@ -91,14 +93,14 @@ export default function Reader({ book, chapterId, history, onProgress }) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [book.id, prevChap, nextChap, toggleFullscreen, scrollToTop]);
+  }, [bookKey, prevChap, nextChap, toggleFullscreen, scrollToTop]);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
     setError(null);
 
-    fetchChapterPages(book, chapterId)
+    fetchChapterPages(book, targetChapterId)
       .then(res => {
         if (!active) return;
         setContent(res);
@@ -111,7 +113,7 @@ export default function Reader({ book, chapterId, history, onProgress }) {
       });
 
     return () => { active = false; };
-  }, [book.id, chapterId]);
+  }, [book.id, targetChapterId]);
 
   useEffect(() => {
     if (loading || !content) return;
@@ -120,7 +122,7 @@ export default function Reader({ book, chapterId, history, onProgress }) {
       if (page > 0 && pages.current[page]) {
         pages.current[page]?.scrollIntoView({ block: 'start', behavior: 'instant' });
       }
-      progressCallback.current(book.id, chapterId, page, book.title, currentChapter.title);
+      progressCallback.current(book.id, targetChapterId, page, book.title, currentChapter.title);
     });
 
     const observer = new IntersectionObserver(entries => {
@@ -128,7 +130,7 @@ export default function Reader({ book, chapterId, history, onProgress }) {
         if (entry.isIntersecting) {
           const next = Number(entry.target.dataset.page);
           setPage(next);
-          progressCallback.current(book.id, chapterId, next, book.title, currentChapter.title);
+          progressCallback.current(book.id, targetChapterId, next, book.title, currentChapter.title);
         }
       }
     }, { rootMargin: '-15% 0px -35% 0px', threshold: 0.15 });
@@ -138,7 +140,7 @@ export default function Reader({ book, chapterId, history, onProgress }) {
       cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, [loading, content, book.id, chapterId]);
+  }, [loading, content, book.id, targetChapterId]);
 
   const totalPages = content?.images?.length || 0;
   const percent = totalPages > 0 ? Math.round(((page + 1) / totalPages) * 100) : 0;
@@ -146,13 +148,13 @@ export default function Reader({ book, chapterId, history, onProgress }) {
   return (
     <section className="reader">
       <div className="reader-toolbar">
-        <a href={`#/book/${book.id}`} className="back-link">
+        <a href={`#/book/${bookKey}`} className="back-link">
           ← <span>{book.title}</span>
         </a>
         {/* ponytail: uses hash links for immediate chapter stepping; upgrade to prefetching next chapter pages if instant transitions desired. */}
         <div className="reader-chapter-nav" role="navigation" aria-label="Điều hướng chương">
           <a
-            href={prevChap ? `#/read/${book.id}/${prevChap.id}` : undefined}
+            href={prevChap ? `#/read/${bookKey}/${prevChap.id}` : undefined}
             className={`icon-button reader-nav-btn ${!prevChap ? 'is-disabled' : ''}`}
             aria-disabled={!prevChap ? 'true' : undefined}
             tabIndex={!prevChap ? -1 : undefined}
@@ -166,7 +168,7 @@ export default function Reader({ book, chapterId, history, onProgress }) {
             <span className="sr-only">Chọn chương</span>
             <select
               value={chapterId}
-              onChange={e => { location.hash = `/read/${book.id}/${e.target.value}`; }}
+              onChange={e => { location.hash = `#/read/${bookKey}/${e.target.value}`; }}
               aria-label="Danh sách chương"
             >
               {chapters.map((c, i) => (
@@ -177,7 +179,7 @@ export default function Reader({ book, chapterId, history, onProgress }) {
             </select>
           </label>
           <a
-            href={nextChap ? `#/read/${book.id}/${nextChap.id}` : undefined}
+            href={nextChap ? `#/read/${bookKey}/${nextChap.id}` : undefined}
             className={`icon-button reader-nav-btn ${!nextChap ? 'is-disabled' : ''}`}
             aria-disabled={!nextChap ? 'true' : undefined}
             tabIndex={!nextChap ? -1 : undefined}
@@ -236,7 +238,7 @@ export default function Reader({ book, chapterId, history, onProgress }) {
           <h2>Không thể tải chương này</h2>
           <p>{error}</p>
           <div className="reader-actions">
-            <a href={`#/book/${book.id}`} className="button">Về chi tiết truyện</a>
+            <a href={`#/book/${bookKey}`} className="button">Về chi tiết truyện</a>
             <button className="button primary" onClick={() => location.reload()}>Thử lại</button>
           </div>
         </div>
@@ -277,18 +279,18 @@ export default function Reader({ book, chapterId, history, onProgress }) {
           <h2>{nextChap ? 'Thêm một chương nữa nhé?' : 'Khép lại chương truyện này.'}</h2>
           <div className="reader-navigation">
             {prevChap ? (
-              <a className="button reader-handoff" href={`#/read/${book.id}/${prevChap.id}`} aria-label={`Chương trước: ${prevChap.title}`}>
+              <a className="button reader-handoff" href={`#/read/${bookKey}/${prevChap.id}`} aria-label={`Chương trước: ${prevChap.title}`}>
                 <span>← {prevChap.title}</span>
               </a>
             ) : (
               <button className="button" disabled>← Chương trước</button>
             )}
             {nextChap ? (
-              <a className="button primary reader-handoff" href={`#/read/${book.id}/${nextChap.id}`} aria-label={`Chương tiếp: ${nextChap.title}`}>
+              <a className="button primary reader-handoff" href={`#/read/${bookKey}/${nextChap.id}`} aria-label={`Chương tiếp: ${nextChap.title}`}>
                 <span>Tiếp: {nextChap.title}</span> <Icon name="arrow"/>
               </a>
             ) : (
-              <a className="button primary reader-handoff" href={`#/book/${book.id}`} aria-label={`Về trang truyện ${book.title}`}>
+              <a className="button primary reader-handoff" href={`#/book/${bookKey}`} aria-label={`Về trang truyện ${book.title}`}>
                 <span>Về {book.title}</span> <Icon name="book"/>
               </a>
             )}

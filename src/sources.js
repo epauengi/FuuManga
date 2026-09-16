@@ -1,3 +1,5 @@
+import { slugify } from './core.mjs';
+
 export const DEFAULT_GENRES = [
   'Tất cả',
   'Action',
@@ -26,6 +28,7 @@ export const GENRE_TAG_MAP = {
 
 const MD_BASE = '/api/mangadex';
 const cache = new Map();
+const slugCache = new Map();
 
 export function mangaDexAssetUrl(url) {
   if (typeof window !== 'undefined' && window.location.hostname === 'localhost') return url;
@@ -36,12 +39,65 @@ export async function fetchCatalog({ query = '', genre = 'Tất cả', offset = 
   return getMangaDexCatalog(query, genre, offset);
 }
 
-export async function fetchBook(id) {
-  if (!id?.startsWith('md-')) return null;
-  if (cache.has(id)) return cache.get(id);
+export async function fetchBook(idOrSlug) {
+  if (!idOrSlug || typeof idOrSlug !== 'string' || idOrSlug.startsWith('ot-')) return null;
+  if (cache.has(idOrSlug)) return cache.get(idOrSlug);
 
-  const book = await fetchMangaDexBook(id.slice(3));
-  if (book) cache.set(book.id, book);
+  let targetId = idOrSlug;
+  if (slugCache.has(idOrSlug)) {
+    targetId = slugCache.get(idOrSlug);
+  }
+
+  if (targetId.startsWith('md-')) {
+    if (cache.has(targetId)) return cache.get(targetId);
+    const book = await fetchMangaDexBook(targetId.slice(3));
+    if (book) {
+      cache.set(book.id, book);
+      if (book.slug) {
+        cache.set(book.slug, book);
+        slugCache.set(book.slug, book.id);
+      }
+    }
+    return book;
+  }
+
+  const query = idOrSlug.replace(/-/g, ' ').trim();
+  if (!query) return null;
+
+  const searchParams = new URLSearchParams({
+    title: query,
+    limit: '15',
+    'availableTranslatedLanguage[]': 'vi',
+    'includes[]': 'cover_art'
+  });
+
+  const json = await fetchJson(`${MD_BASE}/manga?${searchParams}`, 'MangaDex', { notFound: true });
+  const candidates = Array.isArray(json?.data) ? json.data : [];
+  if (!candidates.length) return null;
+
+  const matched = candidates.find(item => {
+    const primaryTitle = mangaTitle(item.attributes);
+    if (slugify(primaryTitle) === idOrSlug) return true;
+    if (Array.isArray(item.attributes?.altTitles)) {
+      return item.attributes.altTitles.some(alt => {
+        const altText = alt?.vi || alt?.en || Object.values(alt || {})[0];
+        return altText && slugify(altText) === idOrSlug;
+      });
+    }
+    return false;
+  }) || candidates[0];
+
+  if (!matched?.id) return null;
+
+  const book = await fetchMangaDexBook(matched.id);
+  if (book) {
+    cache.set(book.id, book);
+    if (book.slug) {
+      cache.set(book.slug, book);
+      slugCache.set(book.slug, book.id);
+    }
+    cache.set(idOrSlug, book);
+  }
   return book;
 }
 
@@ -107,10 +163,16 @@ async function fetchMangaDexBook(mangaId) {
   const chapterData = requireArray(chaptersJson.data, 'MangaDex', 'danh sách chương');
   const chapters = chapterData.map((chapter, index) => mapMangaDexChapter(chapter, index)).filter(Boolean);
 
+  const id = `md-${manga.id}`;
+  const title = mangaTitle(manga.attributes);
+  const slug = slugify(title) || id;
+  slugCache.set(slug, id);
+
   return {
-    id: `md-${manga.id}`,
+    id,
+    slug,
     rawId: manga.id,
-    title: mangaTitle(manga.attributes),
+    title,
     subtitle: 'Bản dịch Tiếng Việt đầy đủ',
     author: 'Đội ngũ biên dịch',
     genres: mangaTags(manga.attributes),
@@ -142,10 +204,16 @@ async function fetchMangaDexChapterPages(chapterId) {
 function mapMangaDexCatalogItem(manga) {
   if (!manga?.id || !manga.attributes) return null;
 
+  const id = `md-${manga.id}`;
+  const title = mangaTitle(manga.attributes);
+  const slug = slugify(title) || id;
+  slugCache.set(slug, id);
+
   return {
-    id: `md-${manga.id}`,
+    id,
+    slug,
     rawId: manga.id,
-    title: mangaTitle(manga.attributes),
+    title,
     subtitle: 'Bản dịch Tiếng Việt đầy đủ',
     author: 'Đội ngũ biên dịch',
     genres: mangaTags(manga.attributes),

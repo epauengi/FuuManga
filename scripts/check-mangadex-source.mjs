@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { fetchBook, fetchCatalog, fetchChapterPages, formatChapterDate, PAGE_SIZE } from '../src/sources.js';
-import { filterChapters, orderChapters, parseRoute, validateState } from '../src/core.mjs';
+import { filterChapters, orderChapters, parseRoute, slugify, validateState } from '../src/core.mjs';
 
 const mangaId = '11111111-1111-1111-1111-111111111111';
 const retryId = '33333333-3333-3333-3333-333333333333';
+const coldId = '44444444-4444-4444-4444-444444444444';
 const chapterId = '22222222-2222-2222-2222-222222222222';
 const coverFile = 'cover.jpg';
 const previousFetch = globalThis.fetch;
@@ -87,7 +88,16 @@ try {
     if (String(url).includes(`/api/mangadex/manga/${retryId}`)) {
       retryAttempts += 1;
       if (retryAttempts === 1) return response({}, 500);
-      return response({ data: { ...manga(), id: retryId } });
+      return response({ data: { ...manga({ title: { vi: 'Truyện thử lại' } }), id: retryId } });
+    }
+    if (String(url).startsWith('/api/mangadex/manga?') && String(url).includes('title=kiem+si')) {
+      return response({
+        data: [{ ...manga({ title: { vi: 'Kiếm Sĩ' } }), id: coldId }],
+        total: 1
+      });
+    }
+    if (String(url).includes(`/api/mangadex/manga/${coldId}`)) {
+      return response({ data: { ...manga({ title: { vi: 'Kiếm Sĩ' } }), id: coldId } });
     }
     if (String(url).startsWith('/api/mangadex/chapter?')) return response({ data: [] });
     if (String(url).includes(`/api/mangadex/at-home/server/${chapterId}`)) return response({
@@ -142,8 +152,33 @@ try {
   assert.deepEqual(matches, [searchable[0], searchable[3]]);
   assert.equal(searchable[0].id, chapterId);
 
+  assert.equal(slugify('Vào Ma Giới Rồi Đấy! Iruma-kun'), 'vao-ma-gioi-roi-day-iruma-kun');
+  assert.equal(slugify('Đại Chiến Titan'), 'dai-chien-titan');
+  assert.equal(slugify('---hello---world---'), 'hello-world');
+  assert.equal(slugify('!@#$%^&*()'), '');
+  assert.equal(slugify(null), '');
+  assert.equal(slugify(undefined), '');
+
   assert.deepEqual(parseRoute(`#/book/md-${mangaId}`), { page: 'detail', bookId: `md-${mangaId}` });
+  assert.deepEqual(parseRoute('#/book/vao-ma-gioi-roi-day-iruma-kun'), { page: 'detail', bookId: 'vao-ma-gioi-roi-day-iruma-kun' });
+  assert.deepEqual(parseRoute('#/read/vao-ma-gioi-roi-day-iruma-kun/chap-1'), { page: 'reader', bookId: 'vao-ma-gioi-roi-day-iruma-kun', chapterId: 'chap-1', chapter: 1 });
   assert.deepEqual(parseRoute('#/book/ot-removed-title'), { page: 'notFound' });
+  assert.deepEqual(parseRoute('#/read/ot-removed-title/1'), { page: 'notFound' });
+
+  const sampleBook = { id: `md-${mangaId}`, slug: 'truyen-mau', chapters: [{ id: chapterId, chapterNum: '1' }] };
+  assert.deepEqual(parseRoute('#/book/truyen-mau', [sampleBook]), { page: 'detail', book: sampleBook, bookId: `md-${mangaId}` });
+  assert.deepEqual(parseRoute('#/read/truyen-mau/1', [sampleBook]), { page: 'reader', book: sampleBook, chapter: 1, bookId: `md-${mangaId}`, chapterId: '1' });
+  assert.deepEqual(parseRoute(`#/read/truyen-mau/${chapterId}`, [sampleBook]), { page: 'reader', book: sampleBook, bookId: `md-${mangaId}`, chapterId, chapter: 1 });
+
+  assert.equal(firstBook.slug, 'truyen-mau');
+  assert.equal(await fetchBook('truyen-mau'), firstBook);
+  assert.equal((await fetchBook('truyen-thu-lai')).id, `md-${retryId}`);
+
+  // Test cold slug lookup via search API
+  const coldBook = await fetchBook('kiem-si');
+  assert.equal(coldBook.id, `md-${coldId}`);
+  assert.equal(coldBook.slug, 'kiem-si');
+  assert.equal(await fetchBook('kiem-si'), coldBook);
   assert.deepEqual(validateState({
     saved: [`md-${mangaId}`, 'ot-removed-title'],
     history: {

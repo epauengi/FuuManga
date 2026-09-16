@@ -60,7 +60,7 @@ function Card({ book, index, isSaved, readingProgress }) {
   return (
     <article className="book-card">
       <h3 className="book-card-title">
-        <a className="catalog-entry" href={`#/book/${book.id}`} aria-label={`Xem ${book.title}`}>
+        <a className="catalog-entry" href={`#/book/${book.slug || book.id}`} aria-label={`Xem ${book.title}`}>
           <span className="entry-media">
             <Artwork src={book.cover} alt={`Bìa ${book.title}`} />
             {isSaved && (
@@ -350,6 +350,14 @@ export default function App() {
           if (!active) return;
           setActiveBook(book);
           setLoadingBook(false);
+          // ponytail: Rewrite legacy md- UUID hash to canonical pure slug without adding browser history entry.
+          if (book?.slug && typeof window !== 'undefined') {
+            if (route.page === 'detail' && window.location.hash.startsWith('#/book/md-')) {
+              window.history.replaceState(null, '', `#/book/${book.slug}`);
+            } else if (route.page === 'reader' && window.location.hash.startsWith('#/read/md-') && route.chapterId) {
+              window.history.replaceState(null, '', `#/read/${book.slug}/${route.chapterId}`);
+            }
+          }
         })
         .catch(error => {
           if (!active) return;
@@ -363,7 +371,7 @@ export default function App() {
     }
 
     return () => { active = false; };
-  }, [route.page, route.bookId, route.book, bookRetry]);
+  }, [route.page, route.bookId, route.book, route.chapterId, bookRetry]);
 
   // Theme & local storage
   useEffect(() => {
@@ -475,6 +483,7 @@ export default function App() {
   }
 
   const recent = Object.entries(state.history).sort((a, b) => b[1].at - a[1].at)[0];
+  const recentBook = recent ? catalogState.items.find(b => b.id === recent[0]) : null;
   const featured = catalogState.items[0];
   const activeHistory = activeBook ? state.history[activeBook.id] : null;
   const resumeChapter = activeBook?.chapters?.find(chapter => String(chapter.id) === String(activeHistory?.chapter));
@@ -618,7 +627,7 @@ export default function App() {
 
               <div className={`featured-record ${featured ? 'is-ready' : catalogState.phase === 'loading' ? 'is-loading' : ''}`}>
                 {featured ? (
-                  <a href={`#/book/${featured.id}`} className="featured-link">
+                  <a href={`#/book/${featured.slug || featured.id}`} className="featured-link">
                     <span className="featured-media">
                       <Artwork src={featured.cover} alt={`Bìa ${featured.title}`} eager />
                       {state.saved.includes(featured.id) && (
@@ -655,7 +664,7 @@ export default function App() {
                   <p className="eyebrow">CÂU CHUYỆN CÒN DỞ</p>
                   <h2>Trở lại nơi bạn dừng</h2>
                 </div>
-                <a className="continue-card" href={`#/read/${recent[0]}/${recent[1].chapter}`}>
+                <a className="continue-card" href={`#/read/${recentBook?.slug || recent[0]}/${recent[1].chapter}`}>
                   <span className="continue-badge"><Icon name="book" size={16} /></span>
                   <span>
                     <strong>{recent[1].bookTitle || 'Truyện đang đọc'}</strong>
@@ -824,7 +833,7 @@ export default function App() {
                     {activeBook.chapters?.length > 0 && (
                       <a
                         className="button primary"
-                        href={`#/read/${activeBook.id}/${resumeChapter?.id || activeBook.chapters[0].id}`}
+                        href={`#/read/${activeBook.slug || activeBook.id}/${resumeChapter?.id || activeBook.chapters[0].id}`}
                       >
                         <Icon name="book" />
                         {resumeChapter ? 'Đọc tiếp' : 'Bắt đầu đọc'}
@@ -933,7 +942,7 @@ export default function App() {
                         const isResume = resumeChapter && String(c.id) === String(resumeChapter.id);
                         return (
                           <li key={c.id || i} className={isResume ? 'is-resume' : ''}>
-                            <a href={`#/read/${activeBook.id}/${c.id}`}>
+                            <a href={`#/read/${activeBook.slug || activeBook.id}/${c.id}`}>
                               <span className="chapter-number">{String(c.chapterNum).padStart(2, '0')}</span>
                               <span className="chapter-copy">
                                 <span>{c.title}</span>

@@ -1,5 +1,6 @@
 export const KEY = 'fuumanga.v1';
 export const normalize = value => String(value).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().trim();
+export const slugify = value => normalize(value ?? '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
 export function filterBooks(books, query, genre) {
   return books.filter(b => normalize(b.title).includes(normalize(query)) && (genre === 'Tất cả' || (b.genres && b.genres.includes(genre))));
@@ -12,25 +13,34 @@ export function parseRoute(hash, books = []) {
     if (parts[0] === 'library' && parts.length === 1) return { page: 'library' };
 
     const id = parts[1];
+    const isLegacyMd = /^md-[a-f0-9-]+$/.test(id);
+    const isSlug = Boolean(id) && !id.startsWith('ot-') && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id);
+
     if (parts[0] === 'book' && id && parts.length === 2) {
-      const book = books.find(b => b.id === id || b.rawId === id);
+      if (id.startsWith('ot-')) return { page: 'notFound' };
+      const book = books.find(b => (b.slug && b.slug === id) || b.id === id || b.rawId === id);
       if (book) return { page: 'detail', book, bookId: book.id };
-      if (/^md-[a-f0-9-]+$/.test(id)) {
+      if (isLegacyMd || isSlug) {
         return { page: 'detail', bookId: id };
       }
     }
 
     const chapterParam = parts[2];
     if (parts[0] === 'read' && id && chapterParam && parts.length === 3) {
-      const book = books.find(b => b.id === id || b.rawId === id);
+      if (id.startsWith('ot-')) return { page: 'notFound' };
+      const book = books.find(b => (b.slug && b.slug === id) || b.id === id || b.rawId === id);
       if (book) {
         const chapterNum = Number(chapterParam);
         if (/^\d+$/.test(chapterParam) && chapterNum >= 1 && chapterNum <= (book.chapters?.length || 0)) {
           return { page: 'reader', book, chapter: chapterNum, bookId: book.id, chapterId: String(chapterNum) };
         }
+        const chapterObj = book.chapters?.find(c => String(c.id) === chapterParam);
+        if (chapterObj) {
+          return { page: 'reader', book, bookId: book.id, chapterId: chapterParam, chapter: Number(chapterObj.chapterNum) || 1 };
+        }
         return { page: 'notFound' };
       }
-      if (/^md-[a-f0-9-]+$/.test(id)) {
+      if (isLegacyMd || isSlug) {
         return { page: 'reader', bookId: id, chapterId: chapterParam, chapter: Number(chapterParam) || 1 };
       }
     }
