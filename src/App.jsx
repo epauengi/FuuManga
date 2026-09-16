@@ -101,7 +101,9 @@ function CatalogSkeleton() {
   return (
     <div className="catalog-skeleton" aria-busy="true" aria-live="polite">
       <span className="sr-only">Đang tải danh mục truyện…</span>
-      {[0, 1, 2, 3, 4].map(index => <div className="skeleton-entry" key={index} aria-hidden="true" />)}
+      {Array.from({ length: 12 }, (_, index) => (
+        <div className="skeleton-entry" key={index} aria-hidden="true" />
+      ))}
     </div>
   );
 }

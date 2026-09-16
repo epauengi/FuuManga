@@ -10,7 +10,7 @@ export const DEFAULT_GENRES = [
   'Supernatural'
 ];
 
-export const PAGE_SIZE = 18;
+export const PAGE_SIZE = 24;
 
 // ponytail: Bảng 8 tag cố định đối chiếu MangaDex tag UUID; nâng cấp fetch động /manga/tag khi cần danh mục mở rộng.
 export const GENRE_TAG_MAP = {

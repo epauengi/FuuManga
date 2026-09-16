@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { fetchBook, fetchCatalog, fetchChapterPages } from '../src/sources.js';
+import { fetchBook, fetchCatalog, fetchChapterPages, PAGE_SIZE } from '../src/sources.js';
 import { filterChapters, orderChapters, parseRoute, validateState } from '../src/core.mjs';
 
 const mangaId = '11111111-1111-1111-1111-111111111111';
@@ -35,7 +35,7 @@ try {
     if (String(url).startsWith('/api/mangadex/manga?')) return response({
       data: [manga()],
       total: 50,
-      limit: 18,
+      limit: PAGE_SIZE,
       offset: 0
     });
     if (String(url).includes(`/api/mangadex/manga/${mangaId}`)) return response({ data: manga() });
@@ -53,7 +53,7 @@ try {
   assert.equal(catalog.items.length, 1);
   assert.equal(catalog.total, 50);
   assert.equal(catalog.offset, 0);
-  assert.equal(catalog.limit, 18);
+  assert.equal(catalog.limit, PAGE_SIZE);
   assert.equal(catalog.nextOffset, 1);
   assert.equal(catalog.reachedLimit, false);
   assert.equal(catalog.items[0].id, `md-${mangaId}`);
@@ -61,7 +61,7 @@ try {
   assert.equal(calls.length, 1);
   assert.match(calls[0], /includedTags%5B%5D=391b0423-d847-456f-aff0-8b0cfc03066b/);
   assert.match(calls[0], /offset=0/);
-  assert.match(calls[0], /limit=18/);
+  assert.match(calls[0], new RegExp(`limit=${PAGE_SIZE}`));
 
   // Pagination edge cases
   const pageLimitExceeded = await fetchCatalog({ offset: 10000 });
