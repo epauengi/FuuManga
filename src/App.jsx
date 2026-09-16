@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { filterBooks, filterChapters, loadState, orderChapters, parseRoute, saveState } from './core.mjs';
 import Reader from './Reader.jsx';
-import { DEFAULT_GENRES, fetchBook, fetchCatalog } from './sources.js';
+import { DEFAULT_GENRES, PAGE_SIZE, fetchBook, fetchCatalog } from './sources.js';
 
 export function Icon({ name, size = 20 }) {
   const paths = {
@@ -135,6 +135,91 @@ function LoadError({ title, message, retry, home }) {
   );
 }
 
+// ponytail: Standard sliding window for pagination; adapt to dynamic viewport sizing if needed.
+function getPageNumbers(current, total) {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  if (current <= 4) {
+    return [1, 2, 3, 4, 5, '...', total];
+  }
+  if (current >= total - 3) {
+    return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
+  }
+  return [1, '...', current - 1, current, current + 1, '...', total];
+}
+
+export function Pagination({ currentPage, totalPages, totalItems, onPageChange, disabled }) {
+  if (totalPages <= 1) return null;
+
+  const pages = getPageNumbers(currentPage, totalPages);
+  const startItem = (currentPage - 1) * PAGE_SIZE + 1;
+  const endItem = Math.min(currentPage * PAGE_SIZE, totalItems || 0);
+
+  return (
+    <nav className="catalog-pagination" role="navigation" aria-label="Phân trang danh mục truyện">
+      <div className="pagination-info" aria-live="polite">
+        <span>
+          Trang <strong>{currentPage}</strong> / <strong>{totalPages}</strong>
+        </span>
+        {totalItems > 0 && (
+          <span className="pagination-range">
+            {' · '}Hiển thị <strong>{startItem.toLocaleString('vi-VN')}</strong>–<strong>{endItem.toLocaleString('vi-VN')}</strong> trong {totalItems > 10000 ? '10.000+' : totalItems.toLocaleString('vi-VN')} truyện
+          </span>
+        )}
+      </div>
+
+      <div className="pagination-controls">
+        <button
+          type="button"
+          className="pagination-btn pagination-prev"
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={disabled || currentPage <= 1}
+          aria-label="Trang trước"
+          title="Trang trước"
+        >
+          <Icon name="chevronLeft" size={16} />
+          <span className="btn-text">Trước</span>
+        </button>
+
+        <div className="pagination-pages" role="list">
+          {pages.map((p, idx) =>
+            p === '...' ? (
+              <span key={`ellipsis-${idx}`} className="pagination-ellipsis" aria-hidden="true">
+                …
+              </span>
+            ) : (
+              <button
+                key={p}
+                type="button"
+                className={`pagination-btn pagination-num ${p === currentPage ? 'is-active' : ''}`}
+                onClick={() => onPageChange(p)}
+                disabled={disabled}
+                aria-current={p === currentPage ? 'page' : undefined}
+                aria-label={`Trang ${p}`}
+              >
+                {p}
+              </button>
+            )
+          )}
+        </div>
+
+        <button
+          type="button"
+          className="pagination-btn pagination-next"
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={disabled || currentPage >= totalPages}
+          aria-label="Trang tiếp theo"
+          title="Trang tiếp theo"
+        >
+          <span className="btn-text">Sau</span>
+          <Icon name="chevronRight" size={16} />
+        </button>
+      </div>
+    </nav>
+  );
+}
+
 export default function App() {
   const [initial] = useState(() => {
     try { return loadState(window.localStorage, []); }
@@ -151,12 +236,13 @@ export default function App() {
   const chapterSearchInputRef = useRef(null);
   const [notice, setNotice] = useState('');
 
+  const [currentPage, setCurrentPage] = useState(1);
+
   // Catalog state: snapshot chứa danh sách, phân trang và trạng thái
   const [catalogState, setCatalogState] = useState({
     items: [],
     total: 0,
-    nextOffset: null,
-    phase: 'loading', // 'idle' | 'loading' | 'loadingMore' | 'error' | 'errorMore'
+    phase: 'loading', // 'idle' | 'loading' | 'error'
     error: '',
     reachedLimit: false
   });
@@ -164,7 +250,6 @@ export default function App() {
 
   // Generation ref quản lý token hủy request cũ tránh race condition
   const catalogSessionRef = useRef(0);
-  const catalogLoadingMoreRef = useRef(false);
 
   // Detail & reader state
   const [activeBook, setActiveBook] = useState(null);
@@ -187,28 +272,32 @@ export default function App() {
     return () => window.removeEventListener('hashchange', change);
   }, []);
 
-  // Fetch catalog on search or genre change
+  // Reset trang về 1 khi tìm kiếm hoặc đổi thể loại
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [query, genre]);
+
+  // Fetch catalog theo trang, tìm kiếm hoặc thể loại
   useEffect(() => {
     const session = ++catalogSessionRef.current;
-    catalogLoadingMoreRef.current = false;
 
     setCatalogState(prev => ({
       ...prev,
       items: [],
-      nextOffset: null,
       phase: 'loading',
       error: '',
       reachedLimit: false
     }));
 
+    const offset = (currentPage - 1) * PAGE_SIZE;
+
     const timeout = setTimeout(() => {
-      fetchCatalog({ query, genre, offset: 0 })
+      fetchCatalog({ query, genre, offset })
         .then(res => {
           if (catalogSessionRef.current !== session) return;
           setCatalogState({
             items: res.items,
             total: res.total,
-            nextOffset: res.nextOffset,
             phase: 'idle',
             error: '',
             reachedLimit: Boolean(res.reachedLimit)
@@ -219,7 +308,6 @@ export default function App() {
           setCatalogState({
             items: [],
             total: 0,
-            nextOffset: null,
             phase: 'error',
             error: error.message || 'Không thể tải kho truyện. Vui lòng thử lại.',
             reachedLimit: false
@@ -230,57 +318,20 @@ export default function App() {
     return () => {
       clearTimeout(timeout);
     };
-  }, [query, genre, catalogRetry]);
+  }, [query, genre, currentPage, catalogRetry]);
 
-  const loadMore = useCallback(() => {
-    if (
-      catalogLoadingMoreRef.current ||
-      catalogState.nextOffset == null ||
-      catalogState.phase === 'loading' ||
-      catalogState.phase === 'loadingMore'
-    ) {
-      return;
+  const totalPages = Math.max(1, Math.ceil(Math.min(catalogState.total || 0, 10000) / PAGE_SIZE));
+
+  const handlePageChange = useCallback((newPage) => {
+    if (newPage < 1 || newPage > totalPages || newPage === currentPage) return;
+    setCurrentPage(newPage);
+    const catalogEl = document.getElementById('catalog-heading');
+    if (catalogEl) {
+      catalogEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-
-    catalogLoadingMoreRef.current = true;
-    const session = catalogSessionRef.current;
-    const offsetToLoad = catalogState.nextOffset;
-
-    setCatalogState(prev => ({
-      ...prev,
-      phase: 'loadingMore',
-      error: ''
-    }));
-
-    fetchCatalog({ query, genre, offset: offsetToLoad })
-      .then(res => {
-        if (catalogSessionRef.current !== session) return;
-        catalogLoadingMoreRef.current = false;
-
-        setCatalogState(prev => {
-          const existingIds = new Set(prev.items.map(b => b.id));
-          const fresh = res.items.filter(b => !existingIds.has(b.id));
-          return {
-            items: [...prev.items, ...fresh],
-            total: res.total,
-            nextOffset: res.nextOffset,
-            phase: 'idle',
-            error: '',
-            reachedLimit: Boolean(res.reachedLimit)
-          };
-        });
-      })
-      .catch(error => {
-        if (catalogSessionRef.current !== session) return;
-        catalogLoadingMoreRef.current = false;
-
-        setCatalogState(prev => ({
-          ...prev,
-          phase: 'errorMore',
-          error: error.message || 'Không thể tải thêm truyện. Vui lòng thử lại.'
-        }));
-      });
-  }, [catalogState.nextOffset, catalogState.phase, query, genre]);
+  }, [totalPages, currentPage]);
 
   // Load full book detail when visiting detail or reader route
   useEffect(() => {
@@ -430,6 +481,7 @@ export default function App() {
   const clear = () => {
     setQuery('');
     setGenre('Tất cả');
+    setCurrentPage(1);
   };
 
   const searchInputRef = useRef(null);
@@ -667,10 +719,8 @@ export default function App() {
                   `${currentDisplayList.length} câu chuyện trong thư viện`
                 ) : catalogState.phase === 'loading' ? (
                   'Đang tìm kiếm…'
-                ) : catalogState.total > 0 && catalogState.total < catalogState.items.length ? (
-                  `Đã tải ${catalogState.items.length} truyện · MangaDex hiện báo ${catalogState.total} kết quả`
                 ) : catalogState.total > 0 ? (
-                  `Đang hiển thị ${catalogState.items.length} / ${catalogState.total} truyện`
+                  `Trang ${currentPage} / ${totalPages} · ${catalogState.total.toLocaleString('vi-VN')} truyện`
                 ) : (
                   `${catalogState.items.length} câu chuyện`
                 )}
@@ -700,32 +750,13 @@ export default function App() {
                 </div>
 
                 {route.page === 'home' && (
-                  <div className="catalog-load-more" role="region" aria-label="Tải thêm truyện">
-                    {catalogState.phase === 'loadingMore' ? (
-                      <button type="button" className="button load-more-btn" disabled>
-                        <span className="spinner-inline" aria-hidden="true" />
-                        <span>Đang tải thêm truyện…</span>
-                      </button>
-                    ) : catalogState.phase === 'errorMore' ? (
-                      <div className="load-more-error">
-                        <p>{catalogState.error}</p>
-                        <button type="button" className="button" onClick={loadMore}>
-                          Thử tải lại
-                        </button>
-                      </div>
-                    ) : catalogState.nextOffset != null ? (
-                      <button type="button" className="button load-more-btn" onClick={loadMore}>
-                        <span>Tải thêm 18 truyện</span>
-                        <Icon name="arrowDown" size={16} />
-                      </button>
-                    ) : catalogState.reachedLimit ? (
-                      <p className="load-more-end">
-                        Đã đạt giới hạn 10.000 kết quả từ nguồn MangaDex. Vui lòng nhập từ khóa cụ thể hơn.
-                      </p>
-                    ) : catalogState.items.length > 0 ? (
-                      <p className="load-more-end">Đã hiển thị toàn bộ kết quả phù hợp.</p>
-                    ) : null}
-                  </div>
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    totalItems={catalogState.total}
+                    onPageChange={handlePageChange}
+                    disabled={catalogState.phase === 'loading'}
+                  />
                 )}
               </>
             ) : (

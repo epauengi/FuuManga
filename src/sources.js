@@ -10,6 +10,8 @@ export const DEFAULT_GENRES = [
   'Supernatural'
 ];
 
+export const PAGE_SIZE = 18;
+
 // ponytail: Bảng 8 tag cố định đối chiếu MangaDex tag UUID; nâng cấp fetch động /manga/tag khi cần danh mục mở rộng.
 export const GENRE_TAG_MAP = {
   'Action': '391b0423-d847-456f-aff0-8b0cfc03066b',
@@ -61,7 +63,7 @@ async function getMangaDexCatalog(query, genre, offset = 0) {
     };
   }
 
-  const limit = Math.min(18, 10000 - safeOffset);
+  const limit = Math.min(PAGE_SIZE, 10000 - safeOffset);
   const params = new URLSearchParams({
     limit: String(limit),
     offset: String(safeOffset),
