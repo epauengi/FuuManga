@@ -23,7 +23,8 @@ export function Icon({ name, size = 20 }) {
     maximize: 'M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3',
     minimize: 'M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3',
     arrowUp: 'M12 19V5m-7 7 7-7 7 7',
-    arrowDown: 'M12 5v14m7-7-7 7-7-7'
+    arrowDown: 'M12 5v14m7-7-7 7-7-7',
+    calendar: 'M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z'
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -936,7 +937,19 @@ export default function App() {
                               <span className="chapter-number">{String(c.chapterNum).padStart(2, '0')}</span>
                               <span className="chapter-copy">
                                 <span>{c.title}</span>
-                                {isResume && resumePage !== null && <small>Đang đọc · Trang {resumePage}</small>}
+                                {(c.date || (isResume && resumePage !== null)) && (
+                                  <span className="chapter-meta">
+                                    {c.date && (
+                                      <span className="chapter-date" title={`Cập nhật ngày ${c.date}`}>
+                                        <Icon name="calendar" size={13} />
+                                        <span>{c.date}</span>
+                                      </span>
+                                    )}
+                                    {isResume && resumePage !== null && (
+                                      <small className="chapter-resume">Đang đọc · Trang {resumePage}</small>
+                                    )}
+                                  </span>
+                                )}
                               </span>
                               <Icon name="arrow" />
                             </a>

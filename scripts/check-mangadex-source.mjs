@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { fetchBook, fetchCatalog, fetchChapterPages, PAGE_SIZE } from '../src/sources.js';
+import { fetchBook, fetchCatalog, fetchChapterPages, formatChapterDate, PAGE_SIZE } from '../src/sources.js';
 import { filterChapters, orderChapters, parseRoute, validateState } from '../src/core.mjs';
 
 const mangaId = '11111111-1111-1111-1111-111111111111';
@@ -40,7 +40,7 @@ try {
     });
     if (String(url).includes(`/api/mangadex/manga/${mangaId}`)) return response({ data: manga() });
     if (String(url).startsWith('/api/mangadex/chapter?')) return response({
-      data: [{ id: chapterId, attributes: { chapter: '1', title: 'Mở đầu' } }]
+      data: [{ id: chapterId, attributes: { chapter: '1', title: 'Mở đầu', publishAt: '2023-05-15T12:00:00.000Z' } }]
     });
     if (String(url).includes(`/api/mangadex/at-home/server/${chapterId}`)) return response({
       baseUrl: 'https://node.mangadex.network/',
@@ -73,6 +73,11 @@ try {
   const secondBook = await fetchBook(`md-${mangaId}`);
   assert.equal(firstBook, secondBook);
   assert.equal(firstBook.chapters[0].id, chapterId);
+  assert.equal(firstBook.chapters[0].rawDate, '2023-05-15T12:00:00.000Z');
+  assert.match(firstBook.chapters[0].date, /^\d{2}\/\d{2}\/\d{4}$/);
+  assert.equal(formatChapterDate(''), '');
+  assert.equal(formatChapterDate(null), '');
+  assert.equal(formatChapterDate('invalid-date'), '');
   assert.equal(calls.length, 3);
   assert.equal(await fetchBook('ot-removed-title'), null);
 

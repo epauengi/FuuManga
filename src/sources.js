@@ -156,14 +156,27 @@ function mapMangaDexCatalogItem(manga) {
   };
 }
 
+export function formatChapterDate(dateString) {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return '';
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
 function mapMangaDexChapter(chapter, index) {
   if (!chapter?.id) return null;
   const number = chapter.attributes?.chapter || String(index + 1);
   const name = chapter.attributes?.title;
+  const rawDate = chapter.attributes?.publishAt || chapter.attributes?.readableAt || chapter.attributes?.createdAt || '';
   return {
     id: chapter.id,
     chapterNum: number,
-    title: name ? `Chương ${number}: ${name}` : `Chương ${number}`
+    title: name ? `Chương ${number}: ${name}` : `Chương ${number}`,
+    rawDate,
+    date: formatChapterDate(rawDate)
   };
 }
 
