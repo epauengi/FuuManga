@@ -101,9 +101,9 @@ export async function fetchBook(idOrSlug) {
   return book;
 }
 
-export async function fetchChapterPages(book, chapterId) {
+export async function fetchChapterPages(book, chapterId, options) {
   if (!book?.id?.startsWith('md-')) throw new Error('Không tìm thấy chương truyện yêu cầu');
-  return fetchMangaDexChapterPages(chapterId);
+  return fetchMangaDexChapterPages(chapterId, options);
 }
 
 async function getMangaDexCatalog(query, genre, offset = 0) {
@@ -196,8 +196,8 @@ async function fetchMangaDexBook(mangaId) {
   };
 }
 
-async function fetchMangaDexChapterPages(chapterId) {
-  const json = await fetchJson(`${MD_BASE}/at-home/server/${encodeURIComponent(chapterId)}`, 'MangaDex');
+async function fetchMangaDexChapterPages(chapterId, options) {
+  const json = await fetchJson(`${MD_BASE}/at-home/server/${encodeURIComponent(chapterId)}`, 'MangaDex', options);
   const baseUrl = validHttpsUrl(json.baseUrl);
   const chapter = requireObject(json.chapter, 'MangaDex', 'dữ liệu chương');
   const hash = typeof chapter.hash === 'string' && chapter.hash;
@@ -286,11 +286,12 @@ function localizedText(value) {
   return value.vi || value.en || Object.values(value).find(text => typeof text === 'string' && text) || '';
 }
 
-async function fetchJson(url, provider, { notFound = false } = {}) {
+async function fetchJson(url, provider, { notFound = false, signal } = {}) {
   let response;
   try {
-    response = await fetch(url);
-  } catch {
+    response = await fetch(url, { signal });
+  } catch (error) {
+    if (error?.name === 'AbortError') throw error;
     throw providerError(provider, 'Không thể kết nối tới máy chủ');
   }
 

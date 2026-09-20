@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { filterBooks, filterChapters, findChapterIndex, loadState, orderChapters, parseRoute, saveState } from './core.mjs';
+import { filterBooks, filterChapters, findChapterIndex, loadState, normalizePageRatio, orderChapters, parseRoute, saveState } from './core.mjs';
 import Reader from './Reader.jsx';
 import { DEFAULT_GENRES, PAGE_SIZE, fetchBook, fetchCatalog } from './sources.js';
 
@@ -473,20 +473,33 @@ export default function App() {
     setNotice(has ? 'Đã bỏ lưu truyện' : 'Đã thêm vào thư viện');
   }
 
-  function progress(id, chapter, page, bookTitle, chapterTitle) {
-    setState(s => ({
-      ...s,
-      history: {
-        ...s.history,
-        [id]: {
-          chapter,
-          page,
-          bookTitle: bookTitle || s.history[id]?.bookTitle || '',
-          chapterTitle: chapterTitle || s.history[id]?.chapterTitle || '',
-          at: Date.now()
-        }
+  function progress(id, chapter, page, pageRatio, bookTitle, chapterTitle) {
+    const ratio = normalizePageRatio(pageRatio);
+    const nextPage = Number.isInteger(page) && page >= 0 ? page : 0;
+    setState(s => {
+      const previous = s.history[id];
+      const nextBookTitle = bookTitle || previous?.bookTitle || '';
+      const nextChapterTitle = chapterTitle || previous?.chapterTitle || '';
+      if (previous && previous.chapter === chapter && previous.page === nextPage &&
+          normalizePageRatio(previous.pageRatio) === ratio &&
+          previous.bookTitle === nextBookTitle && previous.chapterTitle === nextChapterTitle) {
+        return s;
       }
-    }));
+      return {
+        ...s,
+        history: {
+          ...s.history,
+          [id]: {
+            chapter,
+            page: nextPage,
+            pageRatio: ratio,
+            bookTitle: nextBookTitle,
+            chapterTitle: nextChapterTitle,
+            at: Date.now()
+          }
+        }
+      };
+    });
   }
 
   const recent = Object.entries(state.history).sort((a, b) => b[1].at - a[1].at)[0];

@@ -129,6 +129,15 @@ export function filterChapters(chapters, query) {
   });
 }
 
+export const normalizePageRatio = value => {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1 ? value : 0;
+};
+
+export const clampPageIndex = (page, total) => {
+  const index = Number.isInteger(page) && page >= 0 ? page : 0;
+  return Number.isInteger(total) && total > 0 ? Math.min(index, total - 1) : index;
+};
+
 export function validateState(value, books = []) {
   const clean = { saved: [], history: {}, theme: 'dark' };
   if (!value || typeof value !== 'object') return clean;
@@ -143,23 +152,25 @@ export function validateState(value, books = []) {
 
   if (value.history && typeof value.history === 'object') {
     for (const [id, h] of Object.entries(value.history)) {
-      if (!isIdValid(id)) continue;
+      if (!isIdValid(id) || !h || typeof h !== 'object') continue;
       const book = books.find(b => b.id === id || b.rawId === id);
-      if (book) {
-        const panels = book.chapters?.[h.chapter - 1]?.panels;
-        if (h && Number.isInteger(h.chapter) && h.chapter >= 1 && h.chapter <= (book.chapters?.length || 0) &&
-            Number.isInteger(h.page) && h.page >= 0 && (!panels || h.page < panels.length) && Number.isFinite(h.at)) {
-          clean.history[id] = { chapter: h.chapter, page: h.page, at: h.at };
-        }
-      } else if (h && Number.isFinite(h.at)) {
-        clean.history[id] = {
-          chapter: h.chapter,
-          page: h.page || 0,
-          bookTitle: typeof h.bookTitle === 'string' ? h.bookTitle.slice(0, 100) : '',
-          chapterTitle: typeof h.chapterTitle === 'string' ? h.chapterTitle.slice(0, 100) : '',
-          at: h.at
-        };
-      }
+      const validChapter = book
+        ? (Number.isInteger(h.chapter) && h.chapter >= 1 && h.chapter <= (book.chapters?.length || 0)) ||
+          findChapterIndex(book.chapters, h.chapter) >= 0
+        : (Number.isInteger(h.chapter) && h.chapter >= 1) ||
+          (typeof h.chapter === 'string' && h.chapter.trim().length > 0);
+      const validPage = Number.isInteger(h.page) && h.page >= 0;
+      if (!validChapter || !validPage || !Number.isFinite(h.at)) continue;
+
+      const metadata = {
+        pageRatio: normalizePageRatio(h.pageRatio),
+        bookTitle: typeof h.bookTitle === 'string' ? h.bookTitle.slice(0, 100) : '',
+        chapterTitle: typeof h.chapterTitle === 'string' ? h.chapterTitle.slice(0, 100) : '',
+        at: h.at
+      };
+      clean.history[id] = book
+        ? { chapter: h.chapter, page: h.page, pageRatio: metadata.pageRatio, at: metadata.at }
+        : { chapter: h.chapter, page: h.page, pageRatio: metadata.pageRatio, ...metadata };
     }
   }
   return clean;

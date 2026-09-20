@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { fetchBook, fetchCatalog, fetchChapterPages, formatChapterDate, PAGE_SIZE } from '../src/sources.js';
-import { chapterSlug, filterChapters, findChapterIndex, orderChapters, parseRoute, slugify, validateState } from '../src/core.mjs';
+import { chapterSlug, clampPageIndex, filterChapters, findChapterIndex, normalizePageRatio, orderChapters, parseRoute, slugify, validateState } from '../src/core.mjs';
 
 const mangaId = '11111111-1111-1111-1111-111111111111';
 const retryId = '33333333-3333-3333-3333-333333333333';
@@ -204,6 +204,15 @@ try {
   assert.equal(coldBook.id, `md-${coldId}`);
   assert.equal(coldBook.slug, 'kiem-si');
   assert.equal(await fetchBook('kiem-si'), coldBook);
+  assert.equal(normalizePageRatio(0), 0);
+  assert.equal(normalizePageRatio(1), 1);
+  assert.equal(normalizePageRatio(-1), 0);
+  assert.equal(normalizePageRatio(Infinity), 0);
+  assert.equal(normalizePageRatio('0.5'), 0);
+  assert.equal(clampPageIndex(12, 3), 2);
+  assert.equal(clampPageIndex(12, 0), 12);
+  assert.equal(clampPageIndex(-1, 3), 0);
+
   assert.deepEqual(validateState({
     saved: [`md-${mangaId}`, 'ot-removed-title'],
     history: {
@@ -212,9 +221,13 @@ try {
     }
   }), {
     saved: [`md-${mangaId}`],
-    history: { [`md-${mangaId}`]: { chapter: 1, page: 0, bookTitle: '', chapterTitle: '', at: 1 } },
+    history: { [`md-${mangaId}`]: { chapter: 1, page: 0, pageRatio: 0, bookTitle: '', chapterTitle: '', at: 1 } },
     theme: 'dark'
   });
+  assert.equal(validateState({ history: { [`md-${mangaId}`]: { chapter: 1, page: 4, pageRatio: 0.4, at: 1 } } }).history[`md-${mangaId}`].page, 4);
+  assert.equal(validateState({ history: { [`md-${mangaId}`]: { chapter: 1, page: 0, pageRatio: 2, at: 1 } } }).history[`md-${mangaId}`].pageRatio, 0);
+  assert.equal(validateState({ history: { [`md-${mangaId}`]: { chapter: 1, page: 0, pageRatio: 0.75, at: 1 } } }).history[`md-${mangaId}`].pageRatio, 0.75);
+  assert.deepEqual(validateState({ history: { [`md-${mangaId}`]: { chapter: 1, page: 0, at: 1 } } }).history[`md-${mangaId}`], { chapter: 1, page: 0, pageRatio: 0, bookTitle: '', chapterTitle: '', at: 1 });
 } finally {
   globalThis.fetch = previousFetch;
 }
