@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { fetchBook, fetchCatalog, fetchChapterPages, formatChapterDate, PAGE_SIZE } from '../src/sources.js';
+import { deduplicateAndSortChapters, fetchBook, fetchCatalog, fetchChapterPages, formatChapterDate, PAGE_SIZE } from '../src/sources.js';
 import { chapterSlug, clampPageIndex, filterChapters, findChapterIndex, normalizePageRatio, orderChapters, parseRoute, slugify, validateState } from '../src/core.mjs';
 
 const mangaId = '11111111-1111-1111-1111-111111111111';
@@ -77,11 +77,49 @@ try {
   assert.equal(firstBook.chapters[0].slug, 'chuong-1');
   assert.equal(firstBook.chapters[0].rawDate, '2023-05-15T12:00:00.000Z');
   assert.match(firstBook.chapters[0].date, /^\d{2}\/\d{2}\/\d{4}$/);
+  assert.equal(firstBook.chapters[0].lang, 'vi');
+  assert.equal(firstBook.subtitle, 'Bản dịch Tiếng Việt đầy đủ');
   assert.equal(formatChapterDate(''), '');
   assert.equal(formatChapterDate(null), '');
   assert.equal(formatChapterDate('invalid-date'), '');
   assert.equal(calls.length, 3);
+  assert.ok(calls.some(c => c.includes('translatedLanguage[]=vi') && c.includes('translatedLanguage[]=en')));
   assert.equal(await fetchBook('ot-removed-title'), null);
+
+  // Unit tests for deduplicateAndSortChapters
+  const mockChapters = [
+    // Chapter 1: EN arrives first
+    { id: 'c1-en', attributes: { chapter: '1', translatedLanguage: 'en', publishAt: '2023-01-01T00:00:00.000Z' } },
+    // Chapter 1: VI arrives later -> must override EN
+    { id: 'c1-vi', attributes: { chapter: '1', translatedLanguage: 'vi', publishAt: '2023-02-01T00:00:00.000Z' } },
+    // Chapter 2: Only EN exists -> must be kept as EN fallback
+    { id: 'c2-en', attributes: { chapter: '2', translatedLanguage: 'en', publishAt: '2023-03-01T00:00:00.000Z' } },
+    // Chapter 3: VI arrives first
+    { id: 'c3-vi-old', attributes: { chapter: '3', translatedLanguage: 'vi', publishAt: '2023-01-01T00:00:00.000Z' } },
+    // Chapter 3: EN arrives later -> must NOT override existing VI
+    { id: 'c3-en', attributes: { chapter: '3', translatedLanguage: 'en', publishAt: '2023-05-01T00:00:00.000Z' } },
+    // Chapter 3: Newer VI arrives -> must override older VI
+    { id: 'c3-vi-new', attributes: { chapter: '3', translatedLanguage: 'vi', publishAt: '2023-06-01T00:00:00.000Z' } },
+    // Chapter 4: External link (MangaPlus/Bilibili) -> must be filtered out
+    { id: 'c4-external', attributes: { chapter: '4', translatedLanguage: 'en', externalUrl: 'https://mangaplus.shueisha.co.jp/viewer/1000' } },
+    // Chapter 0.5: Decimal chapter -> must sort before 1
+    { id: 'c05-vi', attributes: { chapter: '0.5', translatedLanguage: 'vi', publishAt: '2023-01-01T00:00:00.000Z' } },
+    // Special chapter without chapter number -> placed at the end
+    { id: 'c-special', attributes: { title: 'Oneshot', translatedLanguage: 'vi', publishAt: '2023-01-01T00:00:00.000Z' } }
+  ];
+
+  const deduped = deduplicateAndSortChapters(mockChapters);
+  assert.equal(deduped.length, 5); // 0.5, 1, 2, 3, special (external filtered out)
+  assert.equal(deduped[0].id, 'c05-vi');
+  assert.equal(deduped[1].id, 'c1-vi'); // VI overrode EN
+  assert.equal(deduped[2].id, 'c2-en'); // EN kept as fallback
+  assert.equal(deduped[3].id, 'c3-vi-new'); // Newer VI kept
+  assert.equal(deduped[4].id, 'c-special'); // Special chapter at end
+
+  // Empty/null safety
+  assert.deepEqual(deduplicateAndSortChapters([]), []);
+  assert.deepEqual(deduplicateAndSortChapters(null), []);
+  assert.deepEqual(deduplicateAndSortChapters(undefined), []);
 
   let retryAttempts = 0;
   globalThis.fetch = async url => {

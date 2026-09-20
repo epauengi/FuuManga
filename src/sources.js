@@ -157,12 +157,35 @@ async function fetchMangaDexBook(mangaId) {
 
   const manga = requireObject(json.data, 'MangaDex', 'thông tin truyện');
   const chaptersJson = await fetchJson(
-    `${MD_BASE}/chapter?manga=${encodeURIComponent(mangaId)}&translatedLanguage[]=vi&order[chapter]=asc&limit=100`,
+    `${MD_BASE}/chapter?manga=${encodeURIComponent(mangaId)}&translatedLanguage[]=vi&translatedLanguage[]=en&order[chapter]=asc&limit=100`,
     'MangaDex'
   );
-  const chapterData = requireArray(chaptersJson.data, 'MangaDex', 'danh sách chương');
+  let chapterData = requireArray(chaptersJson.data, 'MangaDex', 'danh sách chương');
+  const totalChapters = Number.isFinite(Number(chaptersJson.total)) ? Number(chaptersJson.total) : chapterData.length;
+  if (totalChapters > 100) {
+    const maxOffset = Math.min(totalChapters, 500);
+    const pagesToFetch = [];
+    for (let offset = 100; offset < maxOffset; offset += 100) {
+      pagesToFetch.push(
+        fetchJson(
+          `${MD_BASE}/chapter?manga=${encodeURIComponent(mangaId)}&translatedLanguage[]=vi&translatedLanguage[]=en&order[chapter]=asc&limit=100&offset=${offset}`,
+          'MangaDex'
+        ).then(res => (Array.isArray(res?.data) ? res.data : [])).catch(() => [])
+      );
+    }
+    if (pagesToFetch.length > 0) {
+      const extraPages = await Promise.all(pagesToFetch);
+      for (const extra of extraPages) {
+        if (Array.isArray(extra) && extra.length > 0) {
+          chapterData = chapterData.concat(extra);
+        }
+      }
+    }
+  }
+
+  const deduplicated = deduplicateAndSortChapters(chapterData);
   const seenSlugs = new Map();
-  const chapters = chapterData.map((chapter, index) => {
+  const chapters = deduplicated.map((chapter, index) => {
     const mapped = mapMangaDexChapter(chapter, index);
     if (!mapped) return null;
     let s = mapped.slug;
@@ -181,12 +204,20 @@ async function fetchMangaDexBook(mangaId) {
   const slug = slugify(title) || id;
   slugCache.set(slug, id);
 
+  const hasEn = chapters.some(c => c.lang === 'en');
+  const hasVi = chapters.some(c => c.lang === 'vi');
+  const subtitle = hasEn && hasVi
+    ? 'Bản dịch Tiếng Việt & Tiếng Anh bổ sung'
+    : hasEn
+      ? 'Bản dịch Tiếng Anh'
+      : 'Bản dịch Tiếng Việt đầy đủ';
+
   return {
     id,
     slug,
     rawId: manga.id,
     title,
-    subtitle: 'Bản dịch Tiếng Việt đầy đủ',
+    subtitle,
     author: 'Đội ngũ biên dịch',
     genres: mangaTags(manga.attributes),
     cover: mangaDexCover(manga, '512'),
@@ -247,18 +278,73 @@ export function formatChapterDate(dateString) {
   return `${day}/${month}/${year}`;
 }
 
+export function deduplicateAndSortChapters(chapterList) {
+  if (!Array.isArray(chapterList)) return [];
+  const map = new Map();
+
+  for (const chapter of chapterList) {
+    if (!chapter?.id) continue;
+    // Lọc các chương liên kết ngoài (MangaPlus, Bilibili) không có trang ảnh trên MangaDex
+    if (chapter.attributes?.externalUrl) continue;
+
+    const rawNum = chapter.attributes?.chapter;
+    const isNumbered = rawNum !== undefined && rawNum !== null && String(rawNum).trim() !== '';
+    const parsedNum = isNumbered ? Number(rawNum) : null;
+    const isFiniteNum = isNumbered && Number.isFinite(parsedNum);
+    const key = isFiniteNum ? `num:${parsedNum}` : `special:${chapter.id}`;
+
+    const lang = chapter.attributes?.translatedLanguage === 'en' ? 'en' : 'vi';
+    const rawDate = chapter.attributes?.publishAt || chapter.attributes?.readableAt || chapter.attributes?.createdAt || '';
+    const time = rawDate ? new Date(rawDate).getTime() : 0;
+    const safeTime = Number.isFinite(time) ? time : 0;
+
+    const candidate = {
+      chapter,
+      lang,
+      time: safeTime,
+      sortKey: isFiniteNum ? parsedNum : 999999
+    };
+
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, candidate);
+    } else {
+      // 1. Tiếng Việt ưu tiên cao hơn và ghi đè Tiếng Anh
+      if (existing.lang === 'en' && lang === 'vi') {
+        map.set(key, candidate);
+      } else if (existing.lang === lang) {
+        // 2. Cùng ngôn ngữ: chọn bản dịch phát hành mới hơn
+        if (safeTime > existing.time) {
+          map.set(key, candidate);
+        }
+      }
+      // 3. Nếu existing là 'vi' mà candidate là 'en' thì giữ nguyên 'vi'
+    }
+  }
+
+  // Sắp xếp tăng dần theo số chương, sau đó theo thời gian phát hành
+  return Array.from(map.values())
+    .sort((a, b) => {
+      if (a.sortKey !== b.sortKey) return a.sortKey - b.sortKey;
+      return a.time - b.time;
+    })
+    .map(item => item.chapter);
+}
+
 function mapMangaDexChapter(chapter, index) {
   if (!chapter?.id) return null;
   const number = chapter.attributes?.chapter || String(index + 1);
   const name = chapter.attributes?.title;
   const rawDate = chapter.attributes?.publishAt || chapter.attributes?.readableAt || chapter.attributes?.createdAt || '';
+  const lang = chapter.attributes?.translatedLanguage === 'en' ? 'en' : 'vi';
   return {
     id: chapter.id,
     chapterNum: number,
     slug: chapterSlug(number, index),
     title: name ? `Chương ${number}: ${name}` : `Chương ${number}`,
     rawDate,
-    date: formatChapterDate(rawDate)
+    date: formatChapterDate(rawDate),
+    lang
   };
 }
 

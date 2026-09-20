@@ -972,8 +972,11 @@ export default function App() {
                               <span className="chapter-number">{String(c.chapterNum).padStart(2, '0')}</span>
                               <span className="chapter-copy">
                                 <span>{c.title}</span>
-                                {(c.date || (isResume && resumePage !== null)) && (
+                                {(c.date || (isResume && resumePage !== null) || c.lang === 'en') && (
                                   <span className="chapter-meta">
+                                    {c.lang === 'en' && (
+                                      <span className="chapter-badge-en" title="Bản dịch tiếng Anh bổ sung">Bản EN</span>
+                                    )}
                                     {c.date && (
                                       <span className="chapter-date" title={`Cập nhật ngày ${c.date}`}>
                                         <Icon name="calendar" size={13} />
