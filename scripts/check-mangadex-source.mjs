@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict';
-import { deduplicateAndSortChapters, fetchBook, fetchCatalog, fetchChapterPages, formatChapterDate, PAGE_SIZE } from '../src/sources.js';
+import { deduplicateAndSortChapters, fetchBook, fetchCatalog, fetchChapterPages, fetchSavedBooks, formatChapterDate, PAGE_SIZE } from '../src/sources.js';
 import { chapterSlug, clampPageIndex, filterChapters, findChapterIndex, normalizePageRatio, orderChapters, parseRoute, slugify, validateState } from '../src/core.mjs';
 
 const mangaId = '11111111-1111-1111-1111-111111111111';
 const retryId = '33333333-3333-3333-3333-333333333333';
 const coldId = '44444444-4444-4444-4444-444444444444';
+const savedId = '55555555-5555-5555-5555-555555555555';
+const secondSavedId = '77777777-7777-7777-7777-777777777777';
+const missingSavedId = '66666666-6666-6666-6666-666666666666';
 const chapterId = '22222222-2222-2222-2222-222222222222';
 const coverFile = 'cover.jpg';
 const previousFetch = globalThis.fetch;
 let calls = [];
+let savedRequest;
 
 function manga(attributes = {}) {
   return {
@@ -31,8 +35,18 @@ function response(body, status = 200) {
 }
 
 try {
-  globalThis.fetch = async url => {
+  globalThis.fetch = async (url, options = {}) => {
     calls.push(String(url));
+    const parsed = new URL(String(url), 'https://test.invalid');
+    if (parsed.pathname === '/api/mangadex/manga' && parsed.searchParams.has('ids[]')) {
+      savedRequest = { parsed, signal: options.signal };
+      return response({
+        data: [
+          { ...manga({ title: { vi: 'Truyện lưu thứ hai' } }), id: secondSavedId },
+          { ...manga({ title: { vi: 'Truyện đã lưu' } }), id: savedId }
+        ]
+      });
+    }
     if (String(url).startsWith('/api/mangadex/manga?')) return response({
       data: [manga()],
       total: 50,
@@ -64,6 +78,16 @@ try {
   assert.match(calls[0], /offset=0/);
   assert.match(calls[0], new RegExp(`limit=${PAGE_SIZE}`));
 
+  const savedController = new AbortController();
+  const savedBooks = await fetchSavedBooks([`md-${missingSavedId}`, `md-${savedId}`, `md-${secondSavedId}`, `md-${savedId}`, 'md-invalid', mangaId], { signal: savedController.signal });
+  assert.deepEqual(savedBooks.items.map(book => book.id), [`md-${savedId}`, `md-${secondSavedId}`]);
+  assert.deepEqual(savedBooks.unavailableIds, [`md-${missingSavedId}`]);
+  assert.deepEqual(savedRequest.parsed.searchParams.getAll('ids[]'), [missingSavedId, savedId, secondSavedId]);
+  assert.equal(savedRequest.parsed.searchParams.get('limit'), '3');
+  assert.equal(savedRequest.parsed.searchParams.get('includes[]'), 'cover_art');
+  assert.equal(savedRequest.signal, savedController.signal);
+  assert.equal(calls.filter(call => call.includes('ids%5B%5D=')).length, 1);
+
   // Pagination edge cases
   const pageLimitExceeded = await fetchCatalog({ offset: 10000 });
   assert.equal(pageLimitExceeded.nextOffset, null);
@@ -82,7 +106,7 @@ try {
   assert.equal(formatChapterDate(''), '');
   assert.equal(formatChapterDate(null), '');
   assert.equal(formatChapterDate('invalid-date'), '');
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
   assert.ok(calls.some(c => c.includes('translatedLanguage[]=vi') && c.includes('translatedLanguage[]=en')));
   assert.equal(await fetchBook('ot-removed-title'), null);
 

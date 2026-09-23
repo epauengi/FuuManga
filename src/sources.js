@@ -39,6 +39,37 @@ export async function fetchCatalog({ query = '', genre = 'Tất cả', offset = 
   return getMangaDexCatalog(query, genre, offset);
 }
 
+export async function fetchSavedBooks(savedIds, { signal } = {}) {
+  if (!Array.isArray(savedIds)) return { items: [], unavailableIds: [] };
+
+  const rawIds = [...new Set(savedIds
+    .filter(id => typeof id === 'string' && /^md-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(id))
+    .map(id => id.slice(3)))];
+  const found = new Map();
+
+  for (let start = 0; start < rawIds.length; start += 100) {
+    const batch = rawIds.slice(start, start + 100);
+    const params = new URLSearchParams({
+      limit: String(batch.length),
+      'includes[]': 'cover_art'
+    });
+    for (const id of batch) params.append('ids[]', id);
+
+    const json = await fetchJson(`${MD_BASE}/manga?${params}`, 'MangaDex', { signal });
+    const requested = new Set(batch);
+    for (const manga of requireArray(json.data, 'MangaDex', 'thư viện đã lưu')) {
+      if (!requested.has(manga?.id)) continue;
+      const book = mapMangaDexCatalogItem(manga);
+      if (book) found.set(manga.id, book);
+    }
+  }
+
+  return {
+    items: rawIds.map(id => found.get(id)).filter(Boolean),
+    unavailableIds: rawIds.filter(id => !found.has(id)).map(id => `md-${id}`)
+  };
+}
+
 export async function fetchBook(idOrSlug) {
   if (!idOrSlug || typeof idOrSlug !== 'string' || idOrSlug.startsWith('ot-')) return null;
   if (cache.has(idOrSlug)) return cache.get(idOrSlug);

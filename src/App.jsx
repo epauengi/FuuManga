@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { filterBooks, filterChapters, findChapterIndex, loadState, normalizePageRatio, orderChapters, parseRoute, saveState } from './core.mjs';
 import Reader from './Reader.jsx';
-import { DEFAULT_GENRES, PAGE_SIZE, fetchBook, fetchCatalog } from './sources.js';
+import { DEFAULT_GENRES, PAGE_SIZE, fetchBook, fetchCatalog, fetchSavedBooks } from './sources.js';
 
 export function Icon({ name, size = 20 }) {
   const paths = {
@@ -98,10 +98,10 @@ function Card({ book, index, isSaved, readingProgress }) {
   );
 }
 
-function CatalogSkeleton() {
+function CatalogSkeleton({ label = 'Đang tải danh mục truyện…' }) {
   return (
     <div className="catalog-skeleton" aria-busy="true" aria-live="polite">
-      <span className="sr-only">Đang tải danh mục truyện…</span>
+      <span className="sr-only">{label}</span>
       {Array.from({ length: 12 }, (_, index) => (
         <div className="skeleton-entry" key={index} aria-hidden="true" />
       ))}
@@ -250,9 +250,17 @@ export default function App() {
     reachedLimit: false
   });
   const [catalogRetry, setCatalogRetry] = useState(0);
+  const [libraryState, setLibraryState] = useState({
+    items: [],
+    phase: 'idle', // 'idle' | 'loading' | 'error'
+    error: '',
+    unavailableIds: []
+  });
+  const [libraryRetry, setLibraryRetry] = useState(0);
 
   // Generation ref quản lý token hủy request cũ tránh race condition
   const catalogSessionRef = useRef(0);
+  const librarySessionRef = useRef(0);
 
   // Detail & reader state
   const [activeBook, setActiveBook] = useState(null);
@@ -283,6 +291,7 @@ export default function App() {
   // Fetch catalog theo trang, tìm kiếm hoặc thể loại
   useEffect(() => {
     const session = ++catalogSessionRef.current;
+    if (route.page !== 'home') return;
 
     setCatalogState(prev => ({
       ...prev,
@@ -321,7 +330,37 @@ export default function App() {
     return () => {
       clearTimeout(timeout);
     };
-  }, [query, genre, currentPage, catalogRetry]);
+  }, [route.page, query, genre, currentPage, catalogRetry]);
+
+  useEffect(() => {
+    const session = ++librarySessionRef.current;
+    if (route.page !== 'library') return;
+
+    if (!state.saved.length) {
+      setLibraryState({ items: [], phase: 'idle', error: '', unavailableIds: [] });
+      return;
+    }
+
+    const controller = new AbortController();
+    setLibraryState({ items: [], phase: 'loading', error: '', unavailableIds: [] });
+
+    fetchSavedBooks(state.saved, { signal: controller.signal })
+      .then(result => {
+        if (controller.signal.aborted || librarySessionRef.current !== session) return;
+        setLibraryState({ ...result, phase: 'idle', error: '' });
+      })
+      .catch(error => {
+        if (controller.signal.aborted || librarySessionRef.current !== session) return;
+        setLibraryState({
+          items: [],
+          phase: 'error',
+          error: error.message || 'Không thể tải thư viện. Vui lòng thử lại.',
+          unavailableIds: []
+        });
+      });
+
+    return () => controller.abort();
+  }, [route.page, state.saved, libraryRetry]);
 
   const totalPages = Math.max(1, Math.ceil(Math.min(catalogState.total || 0, 10000) / PAGE_SIZE));
 
@@ -580,7 +619,7 @@ export default function App() {
   }, [route.page]);
 
   const currentDisplayList = route.page === 'library'
-    ? catalogState.items.filter(b => state.saved.includes(b.id))
+    ? filterBooks(libraryState.items, query, genre)
     : catalogState.items;
 
   return (
@@ -753,8 +792,10 @@ export default function App() {
                 ))}
               </div>
               <span className="result-count" role="status">
-                {route.page === 'library' ? (
-                  `${currentDisplayList.length} câu chuyện trong thư viện`
+                {route.page === 'library' ? libraryState.phase === 'loading' ? (
+                  'Đang tải thư viện…'
+                ) : (
+                  `${currentDisplayList.length} câu chuyện trong thư viện${libraryState.unavailableIds.length ? ` · ${libraryState.unavailableIds.length} truyện hiện không khả dụng` : ''}`
                 ) : catalogState.phase === 'loading' ? (
                   'Đang tìm kiếm…'
                 ) : catalogState.total > 0 ? (
@@ -765,7 +806,22 @@ export default function App() {
               </span>
             </div>
 
-            {route.page !== 'library' && catalogState.phase === 'loading' ? (
+            {route.page === 'library' && libraryState.unavailableIds.length > 0 && (
+              <div className="warning-banner" role="status">
+                <Icon name="bookmark" size={16} />
+                <span>{libraryState.unavailableIds.length} truyện đã lưu hiện không còn khả dụng trên MangaDex.</span>
+              </div>
+            )}
+
+            {route.page === 'library' && libraryState.phase === 'loading' ? (
+              <CatalogSkeleton label="Đang tải thư viện truyện…" />
+            ) : route.page === 'library' && libraryState.phase === 'error' ? (
+              <LoadError
+                title="Không thể tải thư viện"
+                message={libraryState.error}
+                retry={() => setLibraryRetry(attempt => attempt + 1)}
+              />
+            ) : route.page !== 'library' && catalogState.phase === 'loading' ? (
               <CatalogSkeleton />
             ) : route.page !== 'library' && catalogState.phase === 'error' ? (
               <LoadError
@@ -798,7 +854,7 @@ export default function App() {
                 )}
               </>
             ) : (
-              <Empty library={route.page === 'library' && !state.saved.length} clear={clear} />
+              <Empty library={route.page === 'library' && !libraryState.items.length} clear={clear} />
             )}
 
             <p className="demo-note">
