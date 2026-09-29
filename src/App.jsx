@@ -295,7 +295,6 @@ export default function App() {
 
     setCatalogState(prev => ({
       ...prev,
-      items: [],
       phase: 'loading',
       error: '',
       reachedLimit: false
@@ -317,13 +316,11 @@ export default function App() {
         })
         .catch(error => {
           if (catalogSessionRef.current !== session) return;
-          setCatalogState({
-            items: [],
-            total: 0,
+          setCatalogState(prev => ({
+            ...prev,
             phase: 'error',
-            error: error.message || 'Không thể tải kho truyện. Vui lòng thử lại.',
-            reachedLimit: false
-          });
+            error: error.message || 'Không thể tải kho truyện. Vui lòng thử lại.'
+          }));
         });
     }, 250);
 
@@ -702,7 +699,7 @@ export default function App() {
                       )}
                     </span>
                     <span className="featured-copy">
-                      <span className="featured-index">Mục 01 <i>Truyện mới</i></span>
+                      <span className="featured-index">Mục 01 <i>{catalogState.phase === 'loading' ? 'Đang cập nhật' : catalogState.phase === 'error' ? 'Kết quả trước đó' : query.trim() || genre !== 'Tất cả' ? 'Kết quả phù hợp' : 'Cập nhật gần đây'}</i></span>
                       <strong>{featured.title}</strong>
                       <span className="featured-genre">{(featured.genres || []).slice(0, 2).join(' · ') || 'MangaDex'}</span>
                       <span className="featured-author">{featured.author || 'Đang cập nhật tác giả'}</span>
@@ -791,13 +788,15 @@ export default function App() {
                   </button>
                 ))}
               </div>
-              <span className="result-count" role="status">
+              <span className="result-count" role="status" aria-live="polite">
                 {route.page === 'library' ? libraryState.phase === 'loading' ? (
                   'Đang tải thư viện…'
                 ) : (
                   `${currentDisplayList.length} câu chuyện trong thư viện${libraryState.unavailableIds.length ? ` · ${libraryState.unavailableIds.length} truyện hiện không khả dụng` : ''}`
                 ) : catalogState.phase === 'loading' ? (
-                  'Đang tìm kiếm…'
+                  catalogState.items.length ? 'Đang cập nhật kết quả…' : 'Đang tìm kiếm…'
+                ) : catalogState.phase === 'error' && catalogState.items.length ? (
+                  'Không thể cập nhật kết quả'
                 ) : catalogState.total > 0 ? (
                   `Trang ${currentPage} / ${totalPages} · ${catalogState.total.toLocaleString('vi-VN')} truyện`
                 ) : (
@@ -821,9 +820,9 @@ export default function App() {
                 message={libraryState.error}
                 retry={() => setLibraryRetry(attempt => attempt + 1)}
               />
-            ) : route.page !== 'library' && catalogState.phase === 'loading' ? (
+            ) : route.page === 'home' && catalogState.phase === 'loading' && !catalogState.items.length ? (
               <CatalogSkeleton />
-            ) : route.page !== 'library' && catalogState.phase === 'error' ? (
+            ) : route.page === 'home' && catalogState.phase === 'error' && !catalogState.items.length ? (
               <LoadError
                 title="Không thể tải kho truyện"
                 message={catalogState.error}
@@ -831,7 +830,14 @@ export default function App() {
               />
             ) : currentDisplayList.length ? (
               <>
-                <div className="book-grid">
+                {route.page === 'home' && catalogState.phase === 'error' && (
+                  <LoadError
+                    title="Không thể cập nhật kết quả"
+                    message={catalogState.error}
+                    retry={() => setCatalogRetry(attempt => attempt + 1)}
+                  />
+                )}
+                <div className="book-grid" aria-busy={route.page === 'home' && catalogState.phase === 'loading'} aria-live={route.page === 'home' ? 'polite' : undefined}>
                   {currentDisplayList.map((book, index) => (
                     <Card
                       key={book.id}
@@ -853,6 +859,14 @@ export default function App() {
                   />
                 )}
               </>
+            ) : catalogState.phase === 'loading' && route.page === 'home' ? (
+              <CatalogSkeleton />
+            ) : catalogState.phase === 'error' && route.page === 'home' ? (
+              <LoadError
+                title="Không thể tải kho truyện"
+                message={catalogState.error}
+                retry={() => setCatalogRetry(attempt => attempt + 1)}
+              />
             ) : (
               <Empty library={route.page === 'library' && !libraryState.items.length} clear={clear} />
             )}
