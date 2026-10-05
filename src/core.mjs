@@ -48,8 +48,34 @@ export function findChapterIndex(chapters, chapterParam) {
   return -1;
 }
 
-export function filterBooks(books, query, genre) {
-  return books.filter(b => normalize(b.title).includes(normalize(query)) && (genre === 'Tất cả' || (b.genres && b.genres.includes(genre))));
+export const BOOK_STATUSES = {
+  ongoing: 'Đang phát hành',
+  completed: 'Hoàn thành',
+  hiatus: 'Tạm ngưng',
+  cancelled: 'Đã hủy'
+};
+
+export const BOOK_SORTS = {
+  updated: 'Mới cập nhật',
+  newest: 'Mới thêm trên MangaDex',
+  saved: 'Thứ tự lưu',
+  titleAsc: 'Tên A–Z',
+  titleDesc: 'Tên Z–A'
+};
+
+export function filterBooks(books, { query = '', genres = [], status = '', sort = 'saved' } = {}) {
+  const term = normalize(query ?? '');
+  const selectedGenres = Array.isArray(genres) ? genres : [];
+  const selectedStatus = Object.hasOwn(BOOK_STATUSES, status) ? status : '';
+  const matches = (Array.isArray(books) ? books : []).filter(book => book &&
+    normalize(book.title ?? '').includes(term) &&
+    selectedGenres.every(genre => book.genres?.includes(genre)) &&
+    (!selectedStatus || book.status === selectedStatus)
+  );
+  if (sort === 'titleAsc' || sort === 'titleDesc') {
+    matches.sort((a, b) => String(a.title ?? '').localeCompare(String(b.title ?? ''), 'vi') * (sort === 'titleDesc' ? -1 : 1));
+  }
+  return matches;
 }
 
 export function parseRoute(hash, books = []) {

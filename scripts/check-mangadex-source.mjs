@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { deduplicateAndSortChapters, fetchBook, fetchCatalog, fetchChapterPages, fetchSavedBooks, formatChapterDate, PAGE_SIZE } from '../src/sources.js';
-import { chapterSlug, clampPageIndex, filterChapters, findChapterIndex, normalizePageRatio, orderChapters, parseRoute, slugify, validateState } from '../src/core.mjs';
+import { deduplicateAndSortChapters, fetchBook, fetchCatalog, fetchChapterPages, fetchSavedBooks, formatChapterDate, GENRE_TAG_MAP, PAGE_SIZE } from '../src/sources.js';
+import { chapterSlug, clampPageIndex, filterBooks, filterChapters, findChapterIndex, normalizePageRatio, orderChapters, parseRoute, slugify, validateState } from '../src/core.mjs';
 
 const mangaId = '11111111-1111-1111-1111-111111111111';
 const retryId = '33333333-3333-3333-3333-333333333333';
@@ -13,6 +13,7 @@ const coverFile = 'cover.jpg';
 const previousFetch = globalThis.fetch;
 let calls = [];
 let savedRequest;
+let catalogRequest;
 
 function manga(attributes = {}) {
   return {
@@ -20,6 +21,7 @@ function manga(attributes = {}) {
     attributes: {
       title: { vi: 'Truyện mẫu' },
       description: { vi: 'Mô tả mẫu' },
+      status: 'ongoing',
       tags: [{ attributes: { name: { en: 'Action' } } }],
       ...attributes
     },
@@ -47,12 +49,15 @@ try {
         ]
       });
     }
-    if (String(url).startsWith('/api/mangadex/manga?')) return response({
-      data: [manga()],
-      total: 50,
-      limit: PAGE_SIZE,
-      offset: 0
-    });
+    if (String(url).startsWith('/api/mangadex/manga?')) {
+      catalogRequest = { parsed, signal: options.signal };
+      return response({
+        data: [manga()],
+        total: 50,
+        limit: PAGE_SIZE,
+        offset: 0
+      });
+    }
     if (String(url).includes(`/api/mangadex/manga/${mangaId}`)) return response({ data: manga() });
     if (String(url).startsWith('/api/mangadex/chapter?')) return response({
       data: [{ id: chapterId, attributes: { chapter: '1', title: 'Mở đầu', publishAt: '2023-05-15T12:00:00.000Z' } }]
@@ -64,7 +69,8 @@ try {
     throw new Error(`Unexpected request: ${url}`);
   };
 
-  const catalog = await fetchCatalog({ query: 'mẫu', genre: 'Action', offset: 0 });
+  const catalogController = new AbortController();
+  const catalog = await fetchCatalog({ query: ' mẫu ', genres: ['Action'], offset: 0, signal: catalogController.signal });
   assert.equal(catalog.items.length, 1);
   assert.equal(catalog.total, 50);
   assert.equal(catalog.offset, 0);
@@ -77,6 +83,12 @@ try {
   assert.match(calls[0], /includedTags%5B%5D=391b0423-d847-456f-aff0-8b0cfc03066b/);
   assert.match(calls[0], /offset=0/);
   assert.match(calls[0], new RegExp(`limit=${PAGE_SIZE}`));
+  assert.equal(catalog.items[0].status, 'ongoing');
+  assert.equal(catalogRequest.signal, catalogController.signal);
+  assert.equal(catalogRequest.parsed.searchParams.get('title'), 'mẫu');
+  assert.equal(catalogRequest.parsed.searchParams.get('includedTagsMode'), 'AND');
+  assert.equal(catalogRequest.parsed.searchParams.get('order[latestUploadedChapter]'), 'desc');
+  assert.equal(catalogRequest.parsed.searchParams.has('status[]'), false);
 
   const savedController = new AbortController();
   const savedBooks = await fetchSavedBooks([`md-${missingSavedId}`, `md-${savedId}`, `md-${secondSavedId}`, `md-${savedId}`, 'md-invalid', mangaId], { signal: savedController.signal });
@@ -107,7 +119,65 @@ try {
   assert.equal(formatChapterDate(null), '');
   assert.equal(formatChapterDate('invalid-date'), '');
   assert.equal(calls.length, 4);
+  assert.equal(firstBook.status, 'ongoing');
+  assert.equal(savedBooks.items[0].status, 'ongoing');
   assert.ok(calls.some(c => c.includes('translatedLanguage[]=vi') && c.includes('translatedLanguage[]=en')));
+
+  await fetchCatalog({ genres: ['Action', 'Fantasy', 'Action', 'unknown', 'toString'], status: 'completed', sort: 'titleAsc', offset: 24 });
+  const combinedParams = catalogRequest.parsed.searchParams;
+  assert.deepEqual(combinedParams.getAll('includedTags[]'), [GENRE_TAG_MAP.Action, GENRE_TAG_MAP.Fantasy]);
+  assert.equal(combinedParams.get('includedTagsMode'), 'AND');
+  assert.deepEqual(combinedParams.getAll('status[]'), ['completed']);
+  assert.equal(combinedParams.get('offset'), '24');
+  assert.equal(combinedParams.get('availableTranslatedLanguage[]'), 'vi');
+  assert.deepEqual([...combinedParams].filter(([key]) => key.startsWith('order[')), [['order[title]', 'asc']]);
+
+  for (const [sort, order, direction] of [
+    ['updated', 'latestUploadedChapter', 'desc'],
+    ['newest', 'createdAt', 'desc'],
+    ['titleAsc', 'title', 'asc'],
+    ['titleDesc', 'title', 'desc'],
+    ['invalid', 'latestUploadedChapter', 'desc'],
+    ['toString', 'latestUploadedChapter', 'desc']
+  ]) {
+    await fetchCatalog({ sort });
+    const params = catalogRequest.parsed.searchParams;
+    assert.deepEqual([...params].filter(([key]) => key.startsWith('order[')), [[`order[${order}]`, direction]]);
+    assert.equal(params.has('includedTags[]'), false);
+    assert.equal(params.has('includedTagsMode'), false);
+  }
+  for (const status of ['ongoing', 'completed', 'hiatus', 'cancelled']) {
+    await fetchCatalog({ status });
+    assert.deepEqual(catalogRequest.parsed.searchParams.getAll('status[]'), [status]);
+  }
+  await fetchCatalog({ query: null, genres: 'Action', status: 'toString' });
+  assert.equal(catalogRequest.parsed.searchParams.has('title'), false);
+  assert.equal(catalogRequest.parsed.searchParams.has('includedTags[]'), false);
+  assert.equal(catalogRequest.parsed.searchParams.has('status[]'), false);
+  await fetchCatalog({ genres: ['unknown'], status: 'invalid' });
+  assert.equal(catalogRequest.parsed.searchParams.has('includedTagsMode'), false);
+  assert.equal(catalogRequest.parsed.searchParams.has('status[]'), false);
+
+  const library = Object.freeze([
+    { id: 'b', title: 'Bầu trời', genres: ['Action', 'Fantasy'], status: 'ongoing' },
+    { id: 'a', title: 'Ánh sáng', genres: ['Action'], status: 'completed' },
+    { id: 'd', title: 'Đại chiến', genres: ['Action', 'Fantasy'], status: 'completed' },
+    { id: 'c', title: 'Câu chuyện' }
+  ].map(Object.freeze));
+  assert.deepEqual(filterBooks(library), library);
+  assert.deepEqual(filterBooks(library, { query: '  DAI CHIEN ' }), [library[2]]);
+  assert.deepEqual(filterBooks(library, { genres: ['Action'] }), library.slice(0, 3));
+  assert.deepEqual(filterBooks(library, { genres: ['Action', 'Fantasy'] }), [library[0], library[2]]);
+  assert.deepEqual(filterBooks(library, { query: 'chien', genres: ['Action', 'Fantasy'], status: 'completed' }), [library[2]]);
+  assert.deepEqual(filterBooks(library, { status: 'ongoing' }), [library[0]]);
+  assert.deepEqual(filterBooks(library, { genres: ['Romance'] }), []);
+  assert.deepEqual(filterBooks(library, { genres: ['Action', 'Fantasy'], status: 'hiatus' }), []);
+  assert.deepEqual(filterBooks(library, { sort: 'titleAsc' }).map(book => book.id), ['a', 'b', 'c', 'd']);
+  assert.deepEqual(filterBooks(library, { sort: 'titleDesc' }).map(book => book.id), ['d', 'c', 'b', 'a']);
+  assert.deepEqual(library.map(book => book.id), ['b', 'a', 'd', 'c']);
+  assert.deepEqual(filterBooks(library, { query: null, genres: null, status: 'toString', sort: 'invalid' }), library);
+  assert.deepEqual(filterBooks(undefined), []);
+  assert.deepEqual(filterBooks([null, {}], { query: 'missing', genres: ['Action'] }), []);
   assert.equal(await fetchBook('ot-removed-title'), null);
 
   // Unit tests for deduplicateAndSortChapters

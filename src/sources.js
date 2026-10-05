@@ -1,4 +1,4 @@
-import { chapterSlug, slugify } from './core.mjs';
+import { BOOK_STATUSES, chapterSlug, slugify } from './core.mjs';
 
 export const DEFAULT_GENRES = [
   'Tất cả',
@@ -35,8 +35,8 @@ export function mangaDexAssetUrl(url) {
   return `/api/mangadex-image?url=${encodeURIComponent(url)}`;
 }
 
-export async function fetchCatalog({ query = '', genre = 'Tất cả', offset = 0 } = {}) {
-  return getMangaDexCatalog(query, genre, offset);
+export async function fetchCatalog({ query = '', genres = [], status = '', sort = 'updated', offset = 0, signal } = {}) {
+  return getMangaDexCatalog({ query, genres, status, sort, offset, signal });
 }
 
 export async function fetchSavedBooks(savedIds, { signal } = {}) {
@@ -137,7 +137,7 @@ export async function fetchChapterPages(book, chapterId, options) {
   return fetchMangaDexChapterPages(chapterId, options);
 }
 
-async function getMangaDexCatalog(query, genre, offset = 0) {
+async function getMangaDexCatalog({ query, genres, status, sort, offset, signal }) {
   const safeOffset = Math.max(0, Number.isFinite(Number(offset)) ? Math.floor(Number(offset)) : 0);
   if (safeOffset >= 10000) {
     return {
@@ -151,18 +151,28 @@ async function getMangaDexCatalog(query, genre, offset = 0) {
   }
 
   const limit = Math.min(PAGE_SIZE, 10000 - safeOffset);
+  const orders = {
+    updated: ['latestUploadedChapter', 'desc'],
+    newest: ['createdAt', 'desc'],
+    titleAsc: ['title', 'asc'],
+    titleDesc: ['title', 'desc']
+  };
+  const [order, direction] = Object.hasOwn(orders, sort) ? orders[sort] : orders.updated;
   const params = new URLSearchParams({
     limit: String(limit),
     offset: String(safeOffset),
     'availableTranslatedLanguage[]': 'vi',
     'includes[]': 'cover_art',
-    'order[latestUploadedChapter]': 'desc'
+    [`order[${order}]`]: direction
   });
-  if (query) params.set('title', query);
-  const tagId = GENRE_TAG_MAP[genre];
-  if (tagId) params.append('includedTags[]', tagId);
+  if (typeof query === 'string' && query.trim()) params.set('title', query.trim());
+  for (const genre of new Set(Array.isArray(genres) ? genres : [])) {
+    if (Object.hasOwn(GENRE_TAG_MAP, genre)) params.append('includedTags[]', GENRE_TAG_MAP[genre]);
+  }
+  if (params.has('includedTags[]')) params.set('includedTagsMode', 'AND');
+  if (Object.hasOwn(BOOK_STATUSES, status)) params.append('status[]', status);
 
-  const json = await fetchJson(`${MD_BASE}/manga?${params}`, 'MangaDex');
+  const json = await fetchJson(`${MD_BASE}/manga?${params}`, 'MangaDex', { signal });
   const entries = requireArray(json.data, 'MangaDex', 'danh mục truyện');
   const total = Number.isFinite(Number(json.total)) ? Math.max(0, Math.floor(Number(json.total))) : entries.length;
   const items = entries.map(mapMangaDexCatalogItem).filter(Boolean);
@@ -251,6 +261,7 @@ async function fetchMangaDexBook(mangaId) {
     subtitle,
     author: 'Đội ngũ biên dịch',
     genres: mangaTags(manga.attributes),
+    status: Object.hasOwn(BOOK_STATUSES, manga.attributes?.status) ? manga.attributes.status : '',
     cover: mangaDexCover(manga, '512'),
     color: '#a9e6ce',
     description: localizedText(manga.attributes?.description) || '',
@@ -292,6 +303,7 @@ function mapMangaDexCatalogItem(manga) {
     subtitle: 'Bản dịch Tiếng Việt đầy đủ',
     author: 'Đội ngũ biên dịch',
     genres: mangaTags(manga.attributes),
+    status: Object.hasOwn(BOOK_STATUSES, manga.attributes?.status) ? manga.attributes.status : '',
     cover: mangaDexCover(manga, '256'),
     color: '#a9e6ce',
     description: localizedText(manga.attributes.description) || 'Bộ truyện tranh hấp dẫn.',

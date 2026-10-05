@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { filterBooks, filterChapters, findChapterIndex, loadState, normalizePageRatio, orderChapters, parseRoute, saveState } from './core.mjs';
+import { BOOK_SORTS, BOOK_STATUSES, filterBooks, filterChapters, findChapterIndex, loadState, normalizePageRatio, orderChapters, parseRoute, saveState } from './core.mjs';
 import Reader from './Reader.jsx';
 import { DEFAULT_GENRES, PAGE_SIZE, fetchBook, fetchCatalog, fetchSavedBooks } from './sources.js';
 
@@ -114,7 +114,7 @@ function Empty({ library, clear }) {
     <div className="empty">
       <Icon name={library ? 'bookmark' : 'search'} size={36} />
       <h2>{library ? 'Kệ sách đang chờ bạn' : 'Chưa tìm thấy câu chuyện này'}</h2>
-      <p>{library ? 'Lưu một truyện yêu thích từ kho truyện. Lần sau, gặp lại ngay ở đây.' : 'Thử đổi thể loại hoặc bỏ bớt từ khóa tìm kiếm nhé.'}</p>
+      <p>{library ? 'Lưu một truyện yêu thích từ kho truyện. Lần sau, gặp lại ngay ở đây.' : 'Thử bỏ bớt thể loại, đổi trạng thái hoặc xóa từ khóa tìm kiếm.'}</p>
       {library ? (
         <a className="button primary" href="#/">Khám phá truyện <Icon name="arrow" /></a>
       ) : (
@@ -232,8 +232,10 @@ export default function App() {
   const [state, setState] = useState(initial.state);
   const [storageError, setStorageError] = useState(initial.error);
   const [route, setRoute] = useState(() => parseRoute(location.hash, []));
-  const [query, setQuery] = useState('');
-  const [genre, setGenre] = useState('Tất cả');
+  const [filters, setFilters] = useState({ query: '', genres: [], status: '' });
+  const { query, genres, status } = filters;
+  const [catalogSort, setCatalogSort] = useState('updated');
+  const [librarySort, setLibrarySort] = useState('saved');
   const [chapterOrder, setChapterOrder] = useState('oldest');
   const [chapterQuery, setChapterQuery] = useState('');
   const chapterSearchInputRef = useRef(null);
@@ -283,16 +285,23 @@ export default function App() {
     return () => window.removeEventListener('hashchange', change);
   }, []);
 
-  // Reset trang về 1 khi tìm kiếm hoặc đổi thể loại
-  useEffect(() => {
+  function updateFilters(patch) {
+    setFilters(previous => ({ ...previous, ...patch }));
     setCurrentPage(1);
-  }, [query, genre]);
+  }
 
-  // Fetch catalog theo trang, tìm kiếm hoặc thể loại
+  function changeSort(value) {
+    if (route.page === 'library') setLibrarySort(value);
+    else setCatalogSort(value);
+    setCurrentPage(1);
+  }
+
+  // Fetch catalog theo trang và bộ lọc kết hợp
   useEffect(() => {
     const session = ++catalogSessionRef.current;
     if (route.page !== 'home') return;
 
+    const controller = new AbortController();
     setCatalogState(prev => ({
       ...prev,
       phase: 'loading',
@@ -303,9 +312,9 @@ export default function App() {
     const offset = (currentPage - 1) * PAGE_SIZE;
 
     const timeout = setTimeout(() => {
-      fetchCatalog({ query, genre, offset })
+      fetchCatalog({ ...filters, sort: catalogSort, offset, signal: controller.signal })
         .then(res => {
-          if (catalogSessionRef.current !== session) return;
+          if (controller.signal.aborted || catalogSessionRef.current !== session) return;
           setCatalogState({
             items: res.items,
             total: res.total,
@@ -315,7 +324,7 @@ export default function App() {
           });
         })
         .catch(error => {
-          if (catalogSessionRef.current !== session) return;
+          if (controller.signal.aborted || catalogSessionRef.current !== session) return;
           setCatalogState(prev => ({
             ...prev,
             phase: 'error',
@@ -326,8 +335,9 @@ export default function App() {
 
     return () => {
       clearTimeout(timeout);
+      controller.abort();
     };
-  }, [route.page, query, genre, currentPage, catalogRetry]);
+  }, [route.page, filters, catalogSort, currentPage, catalogRetry]);
 
   useEffect(() => {
     const session = ++librarySessionRef.current;
@@ -553,9 +563,10 @@ export default function App() {
   const displayChapters = orderChapters(filterChapters(activeBook?.chapters, chapterQuery), chapterOrder);
 
   const clear = () => {
-    setQuery('');
-    setGenre('Tất cả');
-    setCurrentPage(1);
+    updateFilters({ query: '', genres: [], status: '' });
+    setCatalogSort('updated');
+    setLibrarySort('saved');
+    searchInputRef.current?.focus();
   };
 
   const searchInputRef = useRef(null);
@@ -570,7 +581,7 @@ export default function App() {
       if (e.key === 'Escape') {
         if (isInput && e.target === searchInputRef.current) {
           if (query) {
-            setQuery('');
+            updateFilters({ query: '' });
           } else {
             searchInputRef.current?.blur();
           }
@@ -615,8 +626,20 @@ export default function App() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [route.page]);
 
+  const sort = route.page === 'library' ? librarySort : catalogSort;
+  const defaultSort = route.page === 'library' ? 'saved' : 'updated';
+  const sortOptions = route.page === 'library'
+    ? ['saved', 'titleAsc', 'titleDesc']
+    : ['updated', 'newest', 'titleAsc', 'titleDesc'];
+  const hasFilters = Boolean(query.trim() || genres.length || status);
+  const activeFilters = [
+    query.trim() && { key: 'query', label: `Tên: ${query.trim()}`, clear: () => updateFilters({ query: '' }) },
+    ...genres.map(genre => ({ key: genre, label: genre, clear: () => updateFilters({ genres: genres.filter(value => value !== genre) }) })),
+    status && { key: 'status', label: BOOK_STATUSES[status], clear: () => updateFilters({ status: '' }) },
+    sort !== defaultSort && { key: 'sort', label: BOOK_SORTS[sort], clear: () => changeSort(defaultSort) }
+  ].filter(Boolean);
   const currentDisplayList = route.page === 'library'
-    ? filterBooks(libraryState.items, query, genre)
+    ? filterBooks(libraryState.items, { ...filters, sort: librarySort })
     : catalogState.items;
 
   return (
@@ -699,7 +722,7 @@ export default function App() {
                       )}
                     </span>
                     <span className="featured-copy">
-                      <span className="featured-index">Mục 01 <i>{catalogState.phase === 'loading' ? 'Đang cập nhật' : catalogState.phase === 'error' ? 'Kết quả trước đó' : query.trim() || genre !== 'Tất cả' ? 'Kết quả phù hợp' : 'Cập nhật gần đây'}</i></span>
+                      <span className="featured-index">Mục 01 <i>{catalogState.phase === 'loading' ? 'Đang cập nhật' : catalogState.phase === 'error' ? 'Kết quả trước đó' : hasFilters ? 'Kết quả phù hợp' : BOOK_SORTS[catalogSort]}</i></span>
                       <strong>{featured.title}</strong>
                       <span className="featured-genre">{(featured.genres || []).slice(0, 2).join(' · ') || 'MangaDex'}</span>
                       <span className="featured-author">{featured.author || 'Đang cập nhật tác giả'}</span>
@@ -758,12 +781,12 @@ export default function App() {
                   name="search"
                   autoComplete="off"
                   value={query}
-                  onChange={e => setQuery(e.target.value)}
+                  onChange={e => updateFilters({ query: e.target.value })}
                   placeholder="Tìm truyện theo tên…"
                   aria-label="Tìm truyện theo tên (Phím tắt: / hoặc Ctrl+K)"
                 />
                 {query && (
-                  <button aria-label="Xóa tìm kiếm (Esc)" onClick={() => setQuery('')}>
+                  <button aria-label="Xóa tìm kiếm (Esc)" onClick={() => updateFilters({ query: '' })}>
                     <Icon name="close" size={17} />
                   </button>
                 )}
@@ -773,22 +796,73 @@ export default function App() {
               </label>
             </div>
 
-            <div className="filter-row">
-              <div className="filters" role="group" aria-label="Lọc thể loại">
-                {DEFAULT_GENRES.map(g => (
-                  <button
-                    key={g}
-                    aria-pressed={genre === g}
-                    className={genre === g ? 'selected' : ''}
-                    onClick={() => {
-                      if (genre !== g) setGenre(g);
-                    }}
-                  >
-                    {g}
+            <div className="catalog-filters">
+              <fieldset className="filter-genres" aria-describedby="genre-filter-hint">
+                <legend>Thể loại</legend>
+                <p className="filter-hint" id="genre-filter-hint">Chọn nhiều thể loại · Truyện cần có đủ các thể loại đã chọn.</p>
+                <div className="filters">
+                  {DEFAULT_GENRES.map(genre => {
+                    const isAll = genre === 'Tất cả';
+                    const selected = isAll ? !genres.length : genres.includes(genre);
+                    return (
+                      <button
+                        type="button"
+                        key={genre}
+                        aria-pressed={selected}
+                        className={selected ? 'selected' : ''}
+                        onClick={() => updateFilters({
+                          genres: isAll ? [] : selected ? genres.filter(value => value !== genre) : [...genres, genre]
+                        })}
+                      >
+                        {selected && !isAll && <Icon name="check" size={14} />}
+                        {genre}
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
+
+              <div className="filter-toolbar">
+                <label className="filter-select">
+                  <span>Trạng thái phát hành</span>
+                  <select value={status} onChange={event => updateFilters({ status: event.target.value })}>
+                    <option value="">Tất cả trạng thái</option>
+                    {Object.entries(BOOK_STATUSES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </label>
+                <label className="filter-select">
+                  <span>Sắp xếp</span>
+                  <select value={sort} onChange={event => changeSort(event.target.value)}>
+                    {sortOptions.map(value => <option key={value} value={value}>{BOOK_SORTS[value]}</option>)}
+                  </select>
+                </label>
+                {activeFilters.length > 0 && (
+                  <button type="button" className="filter-clear" onClick={clear}>
+                    <Icon name="close" size={16} />Xóa bộ lọc
                   </button>
-                ))}
+                )}
               </div>
-              <span className="result-count" role="status" aria-live="polite">
+
+              <div className="filter-summary">
+                {activeFilters.length > 0 && (
+                  <div className="active-filters" role="group" aria-label="Điều kiện đang chọn">
+                    {activeFilters.map(filter => (
+                      <button
+                        type="button"
+                        className="filter-chip"
+                        key={filter.key}
+                        aria-label={`Bỏ điều kiện ${filter.label}`}
+                        onClick={() => {
+                          filter.clear();
+                          searchInputRef.current?.focus();
+                        }}
+                      >
+                        <span>{filter.label}</span><Icon name="close" size={14} />
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <span className="result-count" role="status" aria-live="polite">
                 {route.page === 'library' ? libraryState.phase === 'loading' ? (
                   'Đang tải thư viện…'
                 ) : (
@@ -802,7 +876,8 @@ export default function App() {
                 ) : (
                   `${catalogState.items.length} câu chuyện`
                 )}
-              </span>
+                </span>
+              </div>
             </div>
 
             {route.page === 'library' && libraryState.unavailableIds.length > 0 && (
