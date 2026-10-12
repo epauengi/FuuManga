@@ -650,7 +650,7 @@ export default function App() {
 
       <header className="site-header">
         <a href="#/" className="brand" aria-label="FuuManga — Trang chủ">
-          <span className="brand-mark"><Icon name="book" size={23} /></span>
+          <span className="brand-mark" aria-hidden="true"><img src="/nightleaf.svg" alt="" width="36" height="36" /></span>
           fuu<span>manga</span>
           <span className="brand-dot">.</span>
         </a>
@@ -1211,7 +1211,8 @@ export default function App() {
       </main>
 
       <footer>
-        <a href="#/" className="brand">
+        <a href="#/" className="brand" aria-label="FuuManga — Trang chủ">
+          <span className="brand-mark" aria-hidden="true"><img src="/nightleaf.svg" alt="" width="36" height="36" /></span>
           fuu<span>manga</span>
           <span className="brand-dot">.</span>
         </a>

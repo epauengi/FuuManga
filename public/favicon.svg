@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="nightleaf-color" x1="48" y1="48" x2="192" y2="208" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#edd487"/>
+      <stop offset="1" stop-color="#a9e6ce"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="48" fill="#101719"/>
+  <path fill="url(#nightleaf-color)" d="M208 64 A104 104 0 1 0 208 192 C164 192 128 164 128 128 C128 92 164 64 208 64 Z M160 112 H240 L208 144 H160 Z"/>
+</svg>
